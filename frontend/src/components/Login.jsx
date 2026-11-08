@@ -27,12 +27,20 @@ function AuthPage({ onLoginSuccess }) {
 
   const handleLoginChange = (e) => {
     const { name, value } = e.target;
+    if (error) setError('');
     setLoginData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleRegisterChange = (e) => {
     const { name, value } = e.target;
+    if (error) setError('');
     setRegisterData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const switchMode = (loginMode) => {
+    setError('');
+    setMessage('');
+    setIsLogin(loginMode);
   };
 
   const handleLoginSubmit = async (e) => {
@@ -44,7 +52,15 @@ function AuthPage({ onLoginSuccess }) {
       const user = await login(loginData);
       onLoginSuccess(user);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'No se pudo iniciar sesión.');
+      const backendMsg = requestError.response?.data?.message;
+      const networkError = !requestError.response
+        ? 'No se pudo conectar con el servidor. Verifica que el backend esté encendido en el puerto 5000.'
+        : null;
+      setError(
+        backendMsg ||
+          networkError ||
+          'Correo o contraseña incorrectos. Verifica tus credenciales.'
+      );
     } finally {
       setLoading(false);
     }
@@ -85,10 +101,14 @@ function AuthPage({ onLoginSuccess }) {
         {/* ========================================================================= */}
         {/* 1. FORMULARIO DE LOGIN (Lado Izquierdo) */}
         {/* ========================================================================= */}
-        <div className="absolute top-0 left-0 w-full md:w-1/2 h-full flex flex-col justify-center items-center px-6 sm:px-12 py-8 z-10">
+        <div
+          className={`absolute top-0 left-0 w-full md:w-1/2 h-full flex-col justify-center items-center px-6 sm:px-12 py-8 z-10 ${
+            isLogin ? 'flex' : 'hidden md:flex'
+          }`}
+        >
           <div className="w-full max-w-sm">
             {/* Header del Login */}
-            <div className="text-center mb-8">
+            <div className="text-center mb-6">
               <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
                 Iniciar Sesión
               </h2>
@@ -96,6 +116,32 @@ function AuthPage({ onLoginSuccess }) {
                 Ingresa a tu cuenta para continuar
               </p>
             </div>
+
+            {/* Alertas visibles de Error o Éxito en Inicio de Sesión */}
+            {message && isLogin && (
+              <div
+                role="alert"
+                className="mb-4 p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs sm:text-sm font-medium flex items-start gap-2.5 shadow-lg shadow-emerald-950/30"
+              >
+                <span className="text-emerald-400 font-bold text-base leading-none mt-0.5">✓</span>
+                <span>{message}</span>
+              </div>
+            )}
+
+            {error && isLogin && (
+              <div
+                role="alert"
+                className="mb-4 p-3.5 rounded-xl bg-red-500/15 border border-red-500/50 text-red-200 text-xs sm:text-sm font-medium flex items-start gap-2.5 shadow-lg shadow-red-950/40 animate-pulse"
+              >
+                <span className="text-red-400 font-bold text-base leading-none mt-0.5">⚠️</span>
+                <div>
+                  <strong className="block text-red-300 font-bold mb-0.5">
+                    Error de autenticación
+                  </strong>
+                  <span>{error}</span>
+                </div>
+              </div>
+            )}
 
             {/* Formulario */}
             <form onSubmit={handleLoginSubmit} className="space-y-4">
@@ -111,7 +157,11 @@ function AuthPage({ onLoginSuccess }) {
                     value={loginData.correo}
                     onChange={handleLoginChange}
                     placeholder="ejemplo@apuestax.com"
-                    className="w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all duration-200"
+                    className={`w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border ${
+                      error && isLogin
+                        ? 'border-red-500/80 focus:border-red-400 focus:ring-1 focus:ring-red-400'
+                        : 'border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14]'
+                    } outline-none transition-all duration-200`}
                   />
                   <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -138,7 +188,11 @@ function AuthPage({ onLoginSuccess }) {
                     value={loginData.contraseña}
                     onChange={handleLoginChange}
                     placeholder="••••••••"
-                    className="w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all duration-200"
+                    className={`w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border ${
+                      error && isLogin
+                        ? 'border-red-500/80 focus:border-red-400 focus:ring-1 focus:ring-red-400'
+                        : 'border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14]'
+                    } outline-none transition-all duration-200`}
                   />
                   <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,7 +217,7 @@ function AuthPage({ onLoginSuccess }) {
               ¿No tienes una cuenta?{' '}
               <button
                 type="button"
-                onClick={() => setIsLogin(false)}
+                onClick={() => switchMode(false)}
                 className="text-[#39FF14] font-semibold underline ml-1 cursor-pointer"
               >
                 Regístrate aquí
@@ -175,7 +229,11 @@ function AuthPage({ onLoginSuccess }) {
         {/* ========================================================================= */}
         {/* 2. FORMULARIO DE REGISTRO (Lado Derecho) */}
         {/* ========================================================================= */}
-        <div className="absolute top-0 right-0 w-full md:w-1/2 h-full flex flex-col justify-center items-center px-6 sm:px-10 py-6 z-10 overflow-y-auto">
+        <div
+          className={`absolute top-0 right-0 w-full md:w-1/2 h-full flex-col justify-center items-center px-6 sm:px-10 py-6 z-10 overflow-y-auto ${
+            !isLogin ? 'flex' : 'hidden md:flex'
+          }`}
+        >
           <div className="w-full max-w-md">
             {/* Header del Registro */}
             <div className="text-center mb-5">
@@ -186,6 +244,21 @@ function AuthPage({ onLoginSuccess }) {
                 Completa tus datos personales para registrarte
               </p>
             </div>
+
+            {error && !isLogin && (
+              <div
+                role="alert"
+                className="mb-4 p-3.5 rounded-xl bg-red-500/15 border border-red-500/50 text-red-200 text-xs sm:text-sm font-medium flex items-start gap-2.5 shadow-lg shadow-red-950/40"
+              >
+                <span className="text-red-400 font-bold text-base leading-none mt-0.5">⚠️</span>
+                <div>
+                  <strong className="block text-red-300 font-bold mb-0.5">
+                    No se pudo completar el registro
+                  </strong>
+                  <span>{error}</span>
+                </div>
+              </div>
+            )}
 
             {/* Formulario en Grid de 2 Columnas */}
             <form onSubmit={handleRegisterSubmit} className="grid grid-cols-2 gap-3 text-left">
@@ -280,15 +353,12 @@ function AuthPage({ onLoginSuccess }) {
               </div>
             </form>
 
-            {message && <p className="mt-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm">{message}</p>}
-            {error && <p className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">{error}</p>}
-
             {/* Alternativa móvil para cambiar a login */}
             <div className="md:hidden mt-4 text-center text-xs text-slate-400">
               ¿Ya tienes cuenta?{' '}
               <button
                 type="button"
-                onClick={() => setIsLogin(true)}
+                onClick={() => switchMode(true)}
                 className="text-[#39FF14] font-semibold underline ml-1 cursor-pointer"
               >
                 Inicia sesión aquí
@@ -334,7 +404,7 @@ function AuthPage({ onLoginSuccess }) {
                   <div className="pt-3">
                     <button
                       type="button"
-                      onClick={() => setIsLogin(false)}
+                      onClick={() => switchMode(false)}
                       className="px-8 py-3 rounded-xl font-bold text-sm text-[#39FF14] border-2 border-[#39FF14] hover:bg-[#39FF14] hover:text-slate-950 transition-all duration-300 hover:shadow-lg hover:shadow-[#39FF14]/25 active:scale-95 cursor-pointer"
                     >
                       Registrarse
@@ -361,7 +431,7 @@ function AuthPage({ onLoginSuccess }) {
                   <div className="pt-3">
                     <button
                       type="button"
-                      onClick={() => setIsLogin(true)}
+                      onClick={() => switchMode(true)}
                       className="px-8 py-3 rounded-xl font-bold text-sm text-[#39FF14] border-2 border-[#39FF14] hover:bg-[#39FF14] hover:text-slate-950 transition-all duration-300 hover:shadow-lg hover:shadow-[#39FF14]/25 active:scale-95 cursor-pointer"
                     >
                       Iniciar Sesión

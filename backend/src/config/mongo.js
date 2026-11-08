@@ -41,7 +41,7 @@ const connectMongo = async () => {
         await mongoose.connect(mongoUri, {
             serverSelectionTimeoutMS: 4000,
         });
-        console.log(`[MongoDB] Conectado exitosamente a "${mongoUri}"`);
+        console.log('[MongoDB] Conectado exitosamente a MongoDB Atlas');
         await seedMongoDefaults();
     } catch (err) {
         console.warn(`[MongoDB] Aviso de conexión: ${err.message}. (Usando datos de respaldo en memoria)`);

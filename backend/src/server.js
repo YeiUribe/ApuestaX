@@ -928,8 +928,9 @@ app.post('/api/auth/login', async (req, res) => {
             }
 
             return res.status(401).json({
-                message:
-                    'Credenciales inválidas o usuario inactivo.',
+                message: !dbUser
+                    ? 'El correo ingresado no se encuentra registrado o la cuenta está inactiva.'
+                    : 'Contraseña incorrecta. Verifica tus datos e intenta nuevamente.',
             });
         }
 
