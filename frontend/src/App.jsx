@@ -10,6 +10,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' | 'matches' | 'wallet' | 'users'
   const [walletSection, setWalletSection] = useState('recarga'); // 'recarga' | 'retiro' | 'historial' | 'promocion' | 'puntos' | 'cuenta' | 'ayuda'
+  const [pendingQuickBet, setPendingQuickBet] = useState(null);
 
   // Menú desplegable superior derecho (estilo BetPlay / ApuestaX)
   const [menuOpen, setMenuOpen] = useState(false);
@@ -135,49 +136,58 @@ function App() {
   const saldoTotal = saldoReal + bonoActivo;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Barra de navegación superior según el rol autenticado */}
-      <nav className="w-full bg-[#060d24] border-b border-slate-800/90 px-4 sm:px-8 py-3 flex flex-wrap items-center justify-between gap-4 z-40 sticky top-0 shadow-lg">
-        {/* Logo de Marca */}
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-x-hidden">
+      {/* Barra de navegación superior 100% responsive (Móvil y Escritorio) */}
+      <nav className="w-full bg-[#060d24] border-b border-slate-800/90 px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2.5 z-40 sticky top-0 shadow-lg">
+        {/* Logo de Marca (Orden 1 en móvil y escritorio) */}
         <div
           onClick={() => setCurrentView('dashboard')}
-          className="flex items-center gap-2.5 cursor-pointer"
+          className="order-1 flex items-center gap-2 cursor-pointer shrink-0"
         >
           <span className="w-8 h-8 rounded-lg bg-slate-900 border border-[#39FF14]/50 flex items-center justify-center text-[#39FF14] font-black text-base shadow-sm">
             A
           </span>
-          <span className="font-extrabold text-lg text-white tracking-wide">
+          <span className="font-extrabold text-base sm:text-lg text-white tracking-wide">
             APUESTA<span className="text-[#39FF14]">X</span>
           </span>
           {isAdmin && (
-            <span className="ml-1 px-2 py-0.5 rounded-md bg-[#39FF14]/15 border border-[#39FF14]/40 text-[10px] font-extrabold uppercase text-[#39FF14]">
+            <span className="hidden sm:inline-block ml-1 px-2 py-0.5 rounded-md bg-[#39FF14]/15 border border-[#39FF14]/40 text-[10px] font-extrabold uppercase text-[#39FF14]">
               Consola Admin
             </span>
           )}
         </div>
 
-        {/* Pestañas centrales de navegación */}
-        <div className="flex flex-wrap items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 gap-1">
+        {/* Pestañas centrales de navegación (Orden 3 en móvil ocupando ancho completo; Orden 2 en escritorio) */}
+        <div
+          className={`order-3 md:order-2 w-full md:w-auto grid ${
+            isAdmin ? 'grid-cols-3' : 'grid-cols-4'
+          } md:flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 gap-1`}
+        >
           <button
             type="button"
             onClick={() => setCurrentView('dashboard')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${currentView === 'dashboard'
+            className={`px-2 sm:px-4 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer text-center truncate ${
+              currentView === 'dashboard'
                 ? 'bg-[#39FF14] text-slate-950 shadow-sm'
                 : 'text-slate-300 hover:text-white'
-              }`}
+            }`}
           >
-            {isAdmin ? 'Consola Principal' : 'Inicio'}
+            {isAdmin ? 'Consola' : 'Inicio'}
           </button>
 
           <button
             type="button"
             onClick={() => setCurrentView('matches')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${currentView === 'matches'
+            className={`px-2 sm:px-4 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer text-center truncate ${
+              currentView === 'matches'
                 ? 'bg-[#39FF14] text-slate-950 shadow-sm'
                 : 'text-slate-300 hover:text-white'
-              }`}
+            }`}
           >
-            {isAdmin ? 'Control de Partidos' : 'Deportes • Liga BetPlay'}
+            <span className="sm:hidden">{isAdmin ? 'Partidos' : 'Partidos'}</span>
+            <span className="hidden sm:inline">
+              {isAdmin ? 'Control de Partidos' : 'Deportes • Liga BetPlay'}
+            </span>
           </button>
 
           {!isAdmin && (
@@ -185,21 +195,25 @@ function App() {
               <button
                 type="button"
                 onClick={() => openUserSection('historial')}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${currentView === 'wallet' && walletSection === 'historial'
+                className={`px-2 sm:px-4 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer text-center truncate ${
+                  currentView === 'wallet' && walletSection === 'historial'
                     ? 'bg-[#39FF14] text-slate-950 shadow-sm'
                     : 'text-slate-300 hover:text-white'
-                  }`}
+                }`}
               >
-                Mis Apuestas
+                <span className="sm:hidden">Apuestas</span>
+                <span className="hidden sm:inline">Mis Apuestas</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => openUserSection('recarga')}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${currentView === 'wallet' && (walletSection === 'recarga' || walletSection === 'retiro')
+                className={`px-2 sm:px-4 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer text-center truncate ${
+                  currentView === 'wallet' &&
+                  (walletSection === 'recarga' || walletSection === 'retiro')
                     ? 'bg-[#39FF14] text-slate-950 shadow-sm'
                     : 'text-[#39FF14] hover:bg-[#39FF14]/15'
-                  }`}
+                }`}
               >
                 + Recargar
               </button>
@@ -210,19 +224,20 @@ function App() {
             <button
               type="button"
               onClick={() => setCurrentView('users')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${currentView === 'users'
+              className={`px-2 sm:px-4 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer text-center truncate ${
+                currentView === 'users'
                   ? 'bg-[#39FF14] text-slate-950 shadow-sm'
                   : 'text-slate-300 hover:text-white'
-                }`}
+              }`}
             >
-              Usuarios y Auditoría
+              Usuarios
             </button>
           )}
         </div>
 
-        {/* Zona Derecha: Nombre del Usuario, Cronómetro de Sesión y Menú Desplegable (⋮) */}
+        {/* Zona Derecha: Nombre del Usuario, Saldo Rápido y Menú Desplegable (⋮) (Orden 2 en móvil, Orden 3 en escritorio) */}
         {isAdmin ? (
-          <div className="flex items-center gap-3">
+          <div className="order-2 md:order-3 flex items-center gap-2 sm:gap-3">
             <div className="hidden sm:flex flex-col text-right">
               <span className="text-xs font-bold text-white leading-tight">
                 {currentUser.nombre} {currentUser.apellido}
@@ -235,33 +250,39 @@ function App() {
             <button
               type="button"
               onClick={handleLogout}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-red-500/15 text-slate-300 hover:text-red-300 border border-slate-700 hover:border-red-500/30 text-xs font-semibold transition cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-red-500/15 text-slate-300 hover:text-red-300 border border-slate-700 hover:border-red-500/30 text-xs font-semibold transition cursor-pointer"
             >
-              Cerrar Sesión
+              Salir
             </button>
           </div>
         ) : (
-          <div className="relative" ref={menuRef}>
+          <div className="order-2 md:order-3 relative" ref={menuRef}>
             <div
               onClick={() => {
                 if (!menuOpen) fetchUserBalance(currentUser.cedula);
                 setMenuOpen((prev) => !prev);
               }}
-              className="flex items-center gap-3.5 px-3 py-1.5 rounded-xl hover:bg-slate-800/70 transition cursor-pointer select-none"
+              className="flex items-center gap-2 sm:gap-3 px-2.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition cursor-pointer select-none"
             >
-              <span className="text-sm font-semibold text-white tracking-tight">
-                {currentUser.nombre} {currentUser.apellido}
-              </span>
+              {/* Saldo visible en móvil y escritorio */}
+              <div className="flex flex-col text-right">
+                <span className="text-[11px] sm:text-xs font-bold text-white leading-tight truncate max-w-[110px] sm:max-w-[160px]">
+                  {currentUser.nombre} {currentUser.apellido}
+                </span>
+                <span className="text-[11px] font-extrabold text-[#39FF14] font-mono leading-tight">
+                  ${saldoTotal.toLocaleString('es-CO')}
+                </span>
+              </div>
 
-              <div className="flex flex-col items-center text-[11px] leading-tight text-slate-300 font-medium">
+              <div className="hidden lg:flex flex-col items-center text-[10px] leading-tight text-slate-400 font-medium pl-2 border-l border-slate-800">
                 <span>Sesión</span>
-                <span className="font-mono text-white">{formatSessionTime(sessionSeconds)}</span>
+                <span className="font-mono text-slate-200">{formatSessionTime(sessionSeconds)}</span>
               </div>
 
               <button
                 type="button"
                 aria-label="Abrir menú de usuario y saldo"
-                className="w-7 h-7 rounded-full flex items-center justify-center text-white hover:bg-slate-700/80 transition cursor-pointer"
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white hover:bg-slate-700/80 transition cursor-pointer shrink-0"
               >
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                   <circle cx="12" cy="5" r="2" />
@@ -273,7 +294,7 @@ function App() {
 
             {/* MENÚ DESPLEGABLE DE SALDO Y OPCIONES CON LOS COLORES DEL PROYECTO (#0b132b + #39FF14) */}
             {menuOpen && (
-              <div className="absolute right-0 mt-2.5 w-72 rounded-2xl bg-[#0b132b] text-slate-100 shadow-2xl shadow-black/80 border border-slate-700/90 py-5 px-6 z-50 animate-fadeIn">
+              <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-[290px] rounded-2xl bg-[#0b132b] text-slate-100 shadow-2xl shadow-black/80 border border-slate-700/90 py-4 px-5 z-50 animate-fadeIn">
                 {/* Bloque de Saldos con botón de refrescar */}
                 <div className="space-y-2.5 text-sm pb-4 border-b border-slate-800">
                   <div className="flex items-center justify-between">
@@ -383,6 +404,15 @@ function App() {
         <WelcomeDashboard
           user={currentUser}
           onViewMatches={() => setCurrentView('matches')}
+          onSelectQuickBet={(match, market, odd) => {
+            setPendingQuickBet({
+              match,
+              market,
+              odd,
+              ts: Date.now(),
+            });
+            setCurrentView('matches');
+          }}
           onViewWallet={(sec = 'recarga') => {
             if (isAdmin) {
               setCurrentView('users');
@@ -392,7 +422,12 @@ function App() {
           }}
         />
       ) : currentView === 'matches' ? (
-        <MatchesPanel user={currentUser} />
+        <MatchesPanel
+          user={currentUser}
+          pendingQuickBet={pendingQuickBet}
+          onClearQuickBet={() => setPendingQuickBet(null)}
+          onBalanceChange={() => fetchUserBalance(currentUser.cedula)}
+        />
       ) : currentView === 'wallet' && !isAdmin ? (
         <WalletPanel
           user={currentUser}

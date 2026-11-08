@@ -361,7 +361,7 @@ function ColombiaFlag({ faded = false }) {
   );
 }
 
-function MatchesPanel({ user }) {
+function MatchesPanel({ user, pendingQuickBet, onClearQuickBet, onBalanceChange }) {
   const activeCedula = user?.cedula || '1035000001';
   const activeUserName = user ? `${user.nombre} ${user.apellido || ''}`.trim() : 'Usuario';
   const isAdmin = user?.nombre_rol === 'Administrador';
@@ -389,6 +389,7 @@ function MatchesPanel({ user }) {
   const [stakeAmount, setStakeAmount] = useState(20000);
   const [origenFondos, setOrigenFondos] = useState('Billetera');
   const [bancoOrigen, setBancoOrigen] = useState('Bancolombia');
+  const [showMobileBetSlip, setShowMobileBetSlip] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [submittingBet, setSubmittingBet] = useState(false);
@@ -541,7 +542,6 @@ function MatchesPanel({ user }) {
   };
 
   const handleSelectOdd = (match, nombreMercado, valorCuota) => {
-    if (isAdmin) return; // El Administrador no realiza apuestas personales
     setBetFeedback(null);
     setBetSlip((prev) => {
       const existingIndex = prev.findIndex((item) => item.codigo_partido === match.codigo_partido);
@@ -571,6 +571,16 @@ function MatchesPanel({ user }) {
     });
   };
 
+  // Si el usuario seleccionó una cuota desde la pantalla de Inicio (ej. "Ambos Marcan"),
+  // cargarla automáticamente en el Cupón y abrir el modal de confirmación
+  useEffect(() => {
+    if (pendingQuickBet?.match && pendingQuickBet?.market) {
+      handleSelectOdd(pendingQuickBet.match, pendingQuickBet.market, pendingQuickBet.odd);
+      setShowMobileBetSlip(true);
+      if (onClearQuickBet) onClearQuickBet();
+    }
+  }, [pendingQuickBet]);
+
   const removeSelection = (codigoPartido) => {
     setBetSlip((prev) => prev.filter((item) => item.codigo_partido !== codigoPartido));
   };
@@ -579,7 +589,7 @@ function MatchesPanel({ user }) {
   const potentialPayout = betSlip.length > 0 ? Math.round(Number(stakeAmount || 0) * totalOdd) : 0;
 
   const handlePlaceBet = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (betSlip.length === 0) return;
 
     const numericStake = Number(stakeAmount);
@@ -617,6 +627,7 @@ function MatchesPanel({ user }) {
       if (response.nuevo_saldo !== null && response.nuevo_saldo !== undefined) {
         setWalletBalance(Number(response.nuevo_saldo));
       }
+      if (onBalanceChange) onBalanceChange();
       setBetFeedback({
         type: 'success',
         text: `¡Ticket ${response.codigo_ticket} emitido! Ganancia potencial: $${Number(
@@ -865,7 +876,7 @@ function MatchesPanel({ user }) {
                       <div className="bg-gradient-to-b from-[#111827] to-[#1c2636] p-6 border-b border-slate-800">
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 mb-5">
                           <span className="font-semibold text-slate-300">
-                            🏟️ {match.nombre_estadio} ({match.ciudad || 'Colombia'}) • ⚖️ Árbitro:{' '}
+                            Estadio {match.nombre_estadio} ({match.ciudad || 'Colombia'}) • Árbitro:{' '}
                             <strong className="text-white">{match.arbitro || 'Designado'}</strong>
                           </span>
                           {match.estado_partido === 'En Vivo' ? (
@@ -893,7 +904,7 @@ function MatchesPanel({ user }) {
                                 Director Técnico
                               </span>
                               <span className="text-sm font-bold text-[#39FF14] block mt-0.5">
-                                👔 {match.dt_local || 'Por definir'}
+                                {match.dt_local || 'Por definir'}
                               </span>
                             </div>
                           </div>
@@ -906,10 +917,19 @@ function MatchesPanel({ user }) {
                               {match.marcador_local} - {match.marcador_visitante}
                             </div>
                             {selectedLine && (
-                              <span className="px-3 py-1 rounded-full bg-[#39FF14]/15 border border-[#39FF14]/40 text-[#39FF14] text-xs font-bold">
-                                ✓ En cupón: {selectedLine.nombre_mercado} (
-                                {selectedLine.valor_cuota_congelada.toFixed(2)})
-                              </span>
+                              <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                                <span className="px-3 py-1 rounded-full bg-[#39FF14]/15 border border-[#39FF14]/40 text-[#39FF14] text-xs font-bold">
+                                  En cupón: {selectedLine.nombre_mercado} (
+                                  {selectedLine.valor_cuota_congelada.toFixed(2)})
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMobileBetSlip(true)}
+                                  className="px-3.5 py-1 rounded-full bg-[#39FF14] text-slate-950 text-xs font-extrabold shadow-md shadow-[#39FF14]/30 hover:brightness-110 transition cursor-pointer"
+                                >
+                                  Apostar Ahora
+                                </button>
+                              </div>
                             )}
                           </div>
 
@@ -924,7 +944,7 @@ function MatchesPanel({ user }) {
                                 Director Técnico
                               </span>
                               <span className="text-sm font-bold text-[#39FF14] block mt-0.5">
-                                👔 {match.dt_visitante || 'Por definir'}
+                                {match.dt_visitante || 'Por definir'}
                               </span>
                             </div>
                           </div>
@@ -934,10 +954,10 @@ function MatchesPanel({ user }) {
                       {/* Pestañas de Navegación Interna del Partido */}
                       <div className="bg-[#111827] px-4 sm:px-6 py-3 border-b border-slate-800 flex flex-wrap gap-2">
                         {[
-                          { id: 'goleadores', label: '⚽ Apuesta Goleador (Anota Gol)' },
-                          { id: 'tarjetas', label: '🟨 Tarjetas por Jugador' },
-                          { id: 'mercados', label: '🎯 Mercados del Partido (1X2 y Goles)' },
-                          { id: 'alineaciones', label: '📋 Plantillas e Incidencias en Vivo' },
+                          { id: 'goleadores', label: 'Apuesta Goleador (Anota Gol)' },
+                          { id: 'tarjetas', label: 'Tarjetas por Jugador' },
+                          { id: 'mercados', label: 'Mercados del Partido (1X2 y Goles)' },
+                          { id: 'alineaciones', label: 'Plantillas e Incidencias en Vivo' },
                         ].map((tab) => (
                           <button
                             key={tab.id}
@@ -962,7 +982,7 @@ function MatchesPanel({ user }) {
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-slate-800">
                               <div>
                                 <h4 className="text-base font-extrabold text-white">
-                                  ⚽ Jugador Anota Gol en Cualquier Momento
+                                  Jugador Anota Gol en Cualquier Momento
                                 </h4>
                                 <p className="text-xs text-slate-400">
                                   Haz clic sobre la cuota de cualquier jugador para agregarlo directamente a tu Cupón de Apuesta.
@@ -1043,7 +1063,7 @@ function MatchesPanel({ user }) {
                                                 : 'bg-[#111827] text-[#39FF14] border border-slate-700'
                                             }`}
                                           >
-                                            ⚽ {Number(cuotaGol).toFixed(2)}
+                                            {Number(cuotaGol).toFixed(2)}
                                           </span>
                                         </button>
                                       );
@@ -1060,7 +1080,7 @@ function MatchesPanel({ user }) {
                           <div className="space-y-4">
                             <div className="pb-2 border-b border-slate-800">
                               <h4 className="text-base font-extrabold text-white">
-                                🟨 Jugador Recibe Tarjeta en el Partido
+                                Jugador Recibe Tarjeta en el Partido
                               </h4>
                               <p className="text-xs text-slate-400">
                                 Selecciona qué jugador recibirá amonestación durante el encuentro.
@@ -1142,7 +1162,7 @@ function MatchesPanel({ user }) {
                                                 : 'bg-[#111827] text-amber-300 border border-slate-700'
                                             }`}
                                           >
-                                            🟨 {Number(cuotaTarjeta).toFixed(2)}
+                                            {Number(cuotaTarjeta).toFixed(2)}
                                           </span>
                                         </button>
                                       );
@@ -1257,7 +1277,7 @@ function MatchesPanel({ user }) {
                             {/* Cronología de Incidencias */}
                             <div className="bg-[#111827] border border-slate-800 rounded-2xl p-4">
                               <h4 className="text-sm font-extrabold uppercase tracking-wider text-[#39FF14] mb-3">
-                                ⏱️ Incidencias Registradas en el Partido
+                                Incidencias Registradas en el Partido
                               </h4>
                               {details.eventos?.length > 0 ? (
                                 <div className="space-y-2">
@@ -1271,8 +1291,8 @@ function MatchesPanel({ user }) {
                                           {ev.minuto_ocurrencia}&apos;
                                         </strong>
                                         {ev.nombre_evento === 'Gol'
-                                          ? '⚽ Gol de '
-                                          : '🟨 Tarjeta Amarilla para '}
+                                          ? 'Gol de '
+                                          : 'Tarjeta Amarilla para '}
                                         <strong className="text-white">{ev.nombre_jugador}</strong>
                                       </span>
                                       <span className="text-xs font-semibold text-slate-400">
@@ -1313,7 +1333,7 @@ function MatchesPanel({ user }) {
                                       Plantilla {group.teamName}
                                     </h5>
                                     <span className="text-xs text-[#39FF14] font-semibold">
-                                      👔 DT: {group.dt}
+                                      DT: {group.dt}
                                     </span>
                                   </div>
                                   <div className="space-y-2">
@@ -1348,7 +1368,7 @@ function MatchesPanel({ user }) {
                                                 }
                                                 className="px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-[#39FF14] text-xs font-bold cursor-pointer"
                                               >
-                                                +⚽ Gol
+                                                + Gol
                                               </button>
                                               <button
                                                 type="button"
@@ -1364,7 +1384,7 @@ function MatchesPanel({ user }) {
                                                 }
                                                 className="px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold cursor-pointer"
                                               >
-                                                +🟨 Tarjeta
+                                                + Tarjeta
                                               </button>
                                             </div>
                                           )}
@@ -1535,6 +1555,27 @@ function MatchesPanel({ user }) {
                         </div>
                       </div>
 
+                      {/* Si el usuario seleccionó cualquier cuota en este partido (ej. Ambos Marcan), mostrar botón directo para Apostar */}
+                      {selectedLine && (
+                        <div className="mb-3 p-2.5 rounded-xl bg-[#39FF14]/15 border border-[#39FF14]/60 flex items-center justify-between gap-2 animate-fadeIn">
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-extrabold text-[#39FF14] block truncate">
+                              Seleccionado: {selectedLine.nombre_mercado} ({selectedLine.valor_cuota_congelada.toFixed(2)}x)
+                            </span>
+                            <span className="text-[10px] text-slate-300 block">
+                              Ganancia est.: ${potentialPayout.toLocaleString('es-CO')} COP
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowMobileBetSlip(true)}
+                            className="px-3.5 py-2 rounded-xl bg-[#39FF14] text-slate-950 font-black text-xs shadow-lg shadow-[#39FF14]/30 hover:brightness-110 active:scale-95 transition cursor-pointer shrink-0"
+                          >
+                            Apostar Ahora
+                          </button>
+                        </div>
+                      )}
+
                       {/* Botón Principal para Ingresar al Partido y Apostar por Jugadores */}
                       <button
                         type="button"
@@ -1545,21 +1586,18 @@ function MatchesPanel({ user }) {
                             : 'bg-[#111827] hover:bg-slate-900 border-slate-800 hover:border-[#39FF14]/60 text-slate-200'
                         }`}
                       >
-                        <div className="flex items-center gap-2 text-left">
-                          <span className="text-base">⚽</span>
-                          <div>
-                            <span className="text-xs font-extrabold block text-white">
-                              {isPlayerSelection
-                                ? `Seleccionado: ${selectedLine.nombre_mercado}`
-                                : 'Ingresar al Partido • Apuestas de Jugadores'}
-                            </span>
-                            <span className="text-[11px] text-slate-400 block">
-                              Goleadores, tarjetas, técnicos y alineaciones completas
-                            </span>
-                          </div>
+                        <div className="text-left">
+                          <span className="text-xs font-extrabold block text-white">
+                            {isPlayerSelection
+                              ? `Seleccionado: ${selectedLine.nombre_mercado}`
+                              : 'Ingresar al Partido • Apuestas de Jugadores'}
+                          </span>
+                          <span className="text-[11px] text-slate-400 block">
+                            Goleadores, tarjetas, técnicos y alineaciones completas
+                          </span>
                         </div>
                         <span className="px-2.5 py-1 rounded-lg bg-[#1c2636] text-[#39FF14] text-xs font-extrabold shrink-0">
-                          Entrar →
+                          Entrar
                         </span>
                       </button>
 
@@ -1705,10 +1743,165 @@ function MatchesPanel({ user }) {
         </div>
 
         {/* ===================================================================== */}
-        {/* COLUMNA DERECHA: CONSOLA DEPORTIVA (ADMIN) O CUPÓN DE APUESTA (USUARIO) */}
+        {/* COLUMNA DERECHA: CUPÓN DE APUESTA + CONSOLA DEPORTIVA (SI ES ADMIN) */}
         {/* ===================================================================== */}
-        <aside className="space-y-6 lg:sticky lg:top-20">
-          {isAdmin ? (
+        <aside id="cupon-apuesta-panel" className="space-y-6 lg:sticky lg:top-20">
+          <div className="bg-[#1c2636] border border-slate-700/70 rounded-2xl p-5 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-700/80">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#39FF14]"></span>
+                <h2 className="text-base font-extrabold text-white uppercase tracking-wide">
+                  Cupón de Apuesta
+                </h2>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full bg-slate-900 text-[#39FF14] text-xs font-bold">
+                {betSlip.length} {betSlip.length === 1 ? 'selección' : 'selecciones'}
+              </span>
+            </div>
+
+            {betSlip.length === 0 ? (
+              <div className="py-8 text-center">
+                <p className="text-slate-300 text-sm font-medium">Tu cupón está vacío.</p>
+                <p className="text-slate-400 text-xs mt-1">
+                  Selecciona cualquier cuota (`Local`, `Empate`, `Visita`, `+2.5 Goles`, `Ambos Marcan` o un jugador) para activar tu apuesta.
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handlePlaceBet} className="space-y-4">
+                <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                  {betSlip.map((item) => (
+                    <div
+                      key={item.codigo_partido}
+                      className="bg-[#111827] border border-slate-800 rounded-xl p-3 flex items-start justify-between gap-2"
+                    >
+                      <div>
+                        <span className="text-[11px] text-slate-400 block">{item.partido_label}</span>
+                        <span className="text-xs font-bold text-white">{item.nombre_mercado}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-[#39FF14] font-mono text-xs font-bold">
+                          {item.valor_cuota_congelada.toFixed(2)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeSelection(item.codigo_partido)}
+                          className="text-slate-500 hover:text-red-400 text-xs font-bold px-1 cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Método de Pago
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Billetera', 'PSE'].map((metodo) => (
+                      <button
+                        key={metodo}
+                        type="button"
+                        onClick={() => setOrigenFondos(metodo)}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                          origenFondos === metodo
+                            ? 'bg-[#39FF14]/15 border-[#39FF14] text-[#39FF14]'
+                            : 'bg-[#111827] border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {metodo === 'Billetera' ? 'Saldo en Billetera' : 'Wompi / PSE'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {origenFondos === 'PSE' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Entidad Bancaria (Pasarela Wompi / PSE)
+                    </label>
+                    <select
+                      value={bancoOrigen}
+                      onChange={(e) => setBancoOrigen(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#111827] text-white text-xs rounded-xl border border-slate-800 focus:border-[#39FF14] outline-none"
+                    >
+                      {BANCOS_PSE.map((banco) => (
+                        <option key={banco} value={banco}>
+                          {banco}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Monto a Apostar (COP)
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    step="1000"
+                    value={stakeAmount}
+                    onChange={(e) => setStakeAmount(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-[#111827] text-white font-mono text-sm rounded-xl border border-slate-800 focus:border-[#39FF14] outline-none"
+                  />
+                  <div className="flex gap-1.5 mt-2">
+                    {[10000, 20000, 50000, 100000].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setStakeAmount(preset)}
+                        className="flex-1 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-mono text-slate-300 transition cursor-pointer"
+                      >
+                        ${preset / 1000}k
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-[#111827] border border-slate-800 rounded-xl p-3.5 space-y-1.5 text-xs">
+                  <div className="flex justify-between text-slate-400">
+                    <span>Cuota Combinada:</span>
+                    <span className="font-mono font-bold text-white">{totalOdd.toFixed(2)}x</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-slate-800">
+                    <span className="font-bold text-slate-200">Posible Ganancia:</span>
+                    <span className="text-base font-black text-[#39FF14] font-mono">
+                      ${potentialPayout.toLocaleString('es-CO')} COP
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submittingBet}
+                  className="w-full py-3 rounded-xl bg-[#39FF14] text-slate-950 font-extrabold text-sm shadow-lg shadow-[#39FF14]/20 hover:brightness-110 transition cursor-pointer disabled:opacity-50"
+                >
+                  {submittingBet
+                    ? 'Procesando Apuesta...'
+                    : origenFondos === 'PSE'
+                      ? `Pagar con Wompi (${bancoOrigen})`
+                      : 'Confirmar Apuesta'}
+                </button>
+              </form>
+            )}
+
+            {betFeedback && (
+              <div
+                className={`mt-4 p-3 rounded-xl text-xs border ${
+                  betFeedback.type === 'success'
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                    : 'bg-red-500/10 border-red-500/30 text-red-300'
+                }`}
+              >
+                {betFeedback.text}
+              </div>
+            )}
+          </div>
+
+          {isAdmin && (
             <div className="bg-[#1c2636] border border-slate-700/70 rounded-2xl p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-700/80">
                 <div className="flex items-center gap-2">
@@ -1718,13 +1911,9 @@ function MatchesPanel({ user }) {
                   </h2>
                 </div>
                 <span className="px-2.5 py-0.5 rounded-full bg-slate-900 text-[#39FF14] text-[10px] font-bold">
-                  Solo Admin
+                  Admin
                 </span>
               </div>
-
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Como <strong className="text-[#39FF14]">Administrador</strong>, tu cuenta está dedicada exclusivamente a la operación de la consola (sin billetera ni apuestas personales).
-              </p>
 
               <div className="space-y-2.5">
                 {matches.map((m) => (
@@ -1775,162 +1964,233 @@ function MatchesPanel({ user }) {
                 ))}
               </div>
             </div>
-          ) : (
-            <div className="bg-[#1c2636] border border-slate-700/70 rounded-2xl p-5 shadow-2xl">
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-700/80">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#39FF14]"></span>
-                  <h2 className="text-base font-extrabold text-white uppercase tracking-wide">
-                    Cupón de Apuesta
-                  </h2>
-                </div>
-                <span className="px-2.5 py-0.5 rounded-full bg-slate-900 text-[#39FF14] text-xs font-bold">
-                  {betSlip.length} {betSlip.length === 1 ? 'selección' : 'selecciones'}
-                </span>
-              </div>
-
-              {betSlip.length === 0 ? (
-                <div className="py-8 text-center">
-                  <p className="text-slate-300 text-sm font-medium">Tu cupón está vacío.</p>
-                  <p className="text-slate-400 text-xs mt-1">
-                    Selecciona cualquier cuota (`Loc.`, `Emp.` o `Vis.`) en las tarjetas de Apuestas Activas.
-                  </p>
-                </div>
-              ) : (
-                <form onSubmit={handlePlaceBet} className="space-y-4">
-                  <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-                    {betSlip.map((item) => (
-                      <div
-                        key={item.codigo_partido}
-                        className="bg-[#111827] border border-slate-800 rounded-xl p-3 flex items-start justify-between gap-2"
-                      >
-                        <div>
-                          <span className="text-[11px] text-slate-400 block">{item.partido_label}</span>
-                          <span className="text-xs font-bold text-white">{item.nombre_mercado}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-[#39FF14] font-mono text-xs font-bold">
-                            {item.valor_cuota_congelada.toFixed(2)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => removeSelection(item.codigo_partido)}
-                            className="text-slate-500 hover:text-red-400 text-xs font-bold px-1 cursor-pointer"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Método de Pago
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {['Billetera', 'PSE'].map((metodo) => (
-                        <button
-                          key={metodo}
-                          type="button"
-                          onClick={() => setOrigenFondos(metodo)}
-                          className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer ${origenFondos === metodo
-                              ? 'bg-[#39FF14]/15 border-[#39FF14] text-[#39FF14]'
-                              : 'bg-[#111827] border-slate-800 text-slate-400 hover:text-white'
-                            }`}
-                        >
-                          {metodo === 'Billetera' ? 'Saldo en Billetera' : 'Wompi / PSE'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {origenFondos === 'PSE' && (
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                        Entidad Bancaria (Pasarela Wompi / PSE)
-                      </label>
-                      <select
-                        value={bancoOrigen}
-                        onChange={(e) => setBancoOrigen(e.target.value)}
-                        className="w-full px-3 py-2 bg-[#111827] text-white text-xs rounded-xl border border-slate-800 focus:border-[#39FF14] outline-none"
-                      >
-                        {BANCOS_PSE.map((banco) => (
-                          <option key={banco} value={banco}>
-                            {banco}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Monto a Apostar (COP)
-                    </label>
-                    <input
-                      type="number"
-                      min="1000"
-                      step="1000"
-                      value={stakeAmount}
-                      onChange={(e) => setStakeAmount(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-[#111827] text-white font-mono text-sm rounded-xl border border-slate-800 focus:border-[#39FF14] outline-none"
-                    />
-                    <div className="flex gap-1.5 mt-2">
-                      {[10000, 20000, 50000, 100000].map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setStakeAmount(preset)}
-                          className="flex-1 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-mono text-slate-300 transition cursor-pointer"
-                        >
-                          ${preset / 1000}k
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="bg-[#111827] border border-slate-800 rounded-xl p-3.5 space-y-1.5 text-xs">
-                    <div className="flex justify-between text-slate-400">
-                      <span>Cuota Combinada:</span>
-                      <span className="font-mono font-bold text-white">{totalOdd.toFixed(2)}x</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-slate-800">
-                      <span className="font-bold text-slate-200">Posible Ganancia:</span>
-                      <span className="text-base font-black text-[#39FF14] font-mono">
-                        ${potentialPayout.toLocaleString('es-CO')} COP
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={submittingBet}
-                    className="w-full py-3 rounded-xl bg-[#39FF14] text-slate-950 font-extrabold text-sm shadow-lg shadow-[#39FF14]/20 hover:brightness-110 transition cursor-pointer disabled:opacity-50"
-                  >
-                    {submittingBet
-                      ? 'Procesando Apuesta...'
-                      : origenFondos === 'PSE'
-                        ? `Pagar con Wompi (${bancoOrigen})`
-                        : 'Confirmar Apuesta'}
-                  </button>
-                </form>
-              )}
-
-              {betFeedback && (
-                <div
-                  className={`mt-4 p-3 rounded-xl text-xs border ${betFeedback.type === 'success'
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                      : 'bg-red-500/10 border-red-500/30 text-red-300'
-                    }`}
-                >
-                  {betFeedback.text}
-                </div>
-              )}
-            </div>
           )}
         </aside>
       </div>
+
+      {/* ===================================================================== */}
+      {/* BARRA FLOTANTE INFERIOR DE APUESTA RÁPIDA (VISIBLE EN CELULAR Y ESCRITORIO) */}
+      {/* ===================================================================== */}
+      {betSlip.length > 0 && !showMobileBetSlip && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#0b132b]/95 backdrop-blur-md border-t-2 border-[#39FF14] px-3 sm:px-6 py-3 shadow-2xl shadow-black">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <div
+              onClick={() => setShowMobileBetSlip(true)}
+              className="min-w-0 flex-1 cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-full bg-[#39FF14] text-slate-950 text-[11px] font-black">
+                  {betSlip.length} {betSlip.length === 1 ? 'Selección' : 'Selecciones'}
+                </span>
+                <span className="text-xs sm:text-sm font-extrabold text-white truncate">
+                  {betSlip.map((b) => b.nombre_mercado).join(' + ')}
+                </span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">
+                Cuota <strong className="text-[#39FF14] font-mono">{totalOdd.toFixed(2)}x</strong> •
+                Posible ganancia:{' '}
+                <strong className="text-[#39FF14] font-mono">
+                  ${potentialPayout.toLocaleString('es-CO')} COP
+                </strong>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowMobileBetSlip(true)}
+                className="px-3.5 sm:px-5 py-2.5 rounded-xl bg-[#39FF14] text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-[#39FF14]/30 hover:brightness-110 active:scale-95 transition cursor-pointer"
+              >
+                Apostar Ahora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL INTERACTIVO DEL CUPÓN DE APUESTA (IDEAL PARA MÓVIL Y APUESTA RÁPIDA) */}
+      {/* ===================================================================== */}
+      {showMobileBetSlip && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-[#1c2636] border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto animate-fadeIn">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-700/80">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#39FF14]"></span>
+                <h3 className="text-base font-extrabold text-white uppercase tracking-wide">
+                  Confirmar tu Apuesta
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMobileBetSlip(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {betSlip.length === 0 ? (
+              <div className="py-6 text-center space-y-3">
+                {betFeedback ? (
+                  <div
+                    className={`p-4 rounded-xl text-xs sm:text-sm border ${
+                      betFeedback.type === 'success'
+                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                        : 'bg-red-500/15 border-red-500/40 text-red-300'
+                    }`}
+                  >
+                    {betFeedback.text}
+                  </div>
+                ) : (
+                  <p className="text-slate-300 text-sm">No tienes selecciones activas.</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowMobileBetSlip(false)}
+                  className="px-6 py-2.5 rounded-xl bg-[#39FF14] text-slate-950 font-extrabold text-xs cursor-pointer"
+                >
+                  Seguir viendo partidos
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handlePlaceBet} className="space-y-4">
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {betSlip.map((item) => (
+                    <div
+                      key={item.codigo_partido}
+                      className="bg-[#111827] border border-slate-800 rounded-xl p-3 flex items-start justify-between gap-2"
+                    >
+                      <div>
+                        <span className="text-[11px] text-slate-400 block">{item.partido_label}</span>
+                        <span className="text-sm font-extrabold text-white">
+                          {item.nombre_mercado}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-[#39FF14] font-mono text-xs font-bold">
+                          {item.valor_cuota_congelada.toFixed(2)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeSelection(item.codigo_partido)}
+                          className="text-slate-400 hover:text-red-400 text-xs font-bold px-1.5 cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Método de Pago (Disponible: ${walletBalance.toLocaleString('es-CO')} COP)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Billetera', 'PSE'].map((metodo) => (
+                      <button
+                        key={metodo}
+                        type="button"
+                        onClick={() => setOrigenFondos(metodo)}
+                        className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                          origenFondos === metodo
+                            ? 'bg-[#39FF14]/15 border-[#39FF14] text-[#39FF14]'
+                            : 'bg-[#111827] border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {metodo === 'Billetera' ? 'Saldo en Billetera' : 'Wompi / PSE'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {origenFondos === 'PSE' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Entidad Bancaria (Pasarela Wompi / PSE)
+                    </label>
+                    <select
+                      value={bancoOrigen}
+                      onChange={(e) => setBancoOrigen(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-[#111827] text-white text-xs rounded-xl border border-slate-800 focus:border-[#39FF14] outline-none"
+                    >
+                      {BANCOS_PSE.map((banco) => (
+                        <option key={banco} value={banco}>
+                          {banco}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Monto a Apostar (COP)
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    step="1000"
+                    value={stakeAmount}
+                    onChange={(e) => setStakeAmount(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-[#111827] text-white font-mono text-sm rounded-xl border border-slate-800 focus:border-[#39FF14] outline-none"
+                  />
+                  <div className="flex gap-1.5 mt-2">
+                    {[10000, 20000, 50000, 100000].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setStakeAmount(preset)}
+                        className="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-300 transition cursor-pointer"
+                      >
+                        ${preset / 1000}k
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-[#111827] border border-slate-800 rounded-xl p-3.5 space-y-1.5 text-xs">
+                  <div className="flex justify-between text-slate-400">
+                    <span>Cuota Combinada:</span>
+                    <span className="font-mono font-bold text-white">{totalOdd.toFixed(2)}x</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-slate-800">
+                    <span className="font-bold text-slate-200">Posible Ganancia:</span>
+                    <span className="text-base font-black text-[#39FF14] font-mono">
+                      ${potentialPayout.toLocaleString('es-CO')} COP
+                    </span>
+                  </div>
+                </div>
+
+                {betFeedback && (
+                  <div
+                    className={`p-3 rounded-xl text-xs border ${
+                      betFeedback.type === 'success'
+                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                        : 'bg-red-500/15 border-red-500/40 text-red-300'
+                    }`}
+                  >
+                    {betFeedback.text}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={submittingBet}
+                  className="w-full py-3.5 rounded-xl bg-[#39FF14] text-slate-950 font-black text-sm shadow-lg shadow-[#39FF14]/25 hover:brightness-110 transition cursor-pointer disabled:opacity-50"
+                >
+                  {submittingBet
+                    ? 'Procesando Apuesta...'
+                    : origenFondos === 'PSE'
+                      ? `Pagar y Apostar con Wompi (${bancoOrigen})`
+                      : `Confirmar Apuesta ($${Number(stakeAmount || 0).toLocaleString('es-CO')} COP)`}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -143,9 +143,17 @@ const PROMOCIONES_DESTACADAS = [
   },
 ];
 
-function WelcomeDashboard({ user, onViewMatches, onViewWallet }) {
+function WelcomeDashboard({ user, onViewMatches, onSelectQuickBet, onViewWallet }) {
   const displayName = user?.nombre || 'Usuario';
   const isAdmin = user?.nombre_rol === 'Administrador';
+
+  const handleQuickMarketClick = (match, marketName, oddValue) => {
+    if (onSelectQuickBet) {
+      onSelectQuickBet(match, marketName, Number(oddValue));
+    } else if (onViewMatches) {
+      onViewMatches();
+    }
+  };
 
   const [totalUsersCount, setTotalUsersCount] = useState(5);
   const [totalMatchesCount, setTotalMatchesCount] = useState(5);
@@ -289,25 +297,25 @@ function WelcomeDashboard({ user, onViewMatches, onViewWallet }) {
       ];
 
   return (
-    <main className="flex-1 bg-slate-950 text-white px-4 py-8 sm:px-8">
-      <div className="w-full max-w-7xl mx-auto space-y-10">
+    <main className="flex-1 bg-slate-950 text-white px-3 py-5 sm:px-6 lg:px-8 sm:py-8">
+      <div className="w-full max-w-7xl mx-auto space-y-7 sm:space-y-10">
         {/* Encabezado para Administrador */}
         {isAdmin && (
           <header className="text-center sm:text-left">
             <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#39FF14]">
               Apuestax • Consola Central de Administración
             </p>
-            <h1 className="text-3xl font-bold leading-tight sm:text-4xl">
+            <h1 className="text-2xl font-bold leading-tight sm:text-4xl">
               ¡Hola, {displayName}! Panel de Control Apuesta<span className="text-[#39FF14]">X</span>
             </h1>
-            <p className="mt-2 text-sm text-slate-400 sm:text-base">
+            <p className="mt-2 text-xs text-slate-400 sm:text-base">
               Administra las cuentas de usuario, supervisa la auditoría del sistema y controla los marcadores en vivo.
             </p>
           </header>
         )}
 
         {/* 3 CARDS PRINCIPALES (CON COLORES DE MARCA #0b132b + #39FF14 Y MARCA DE AGUA APUESTAX) */}
-        <section className="grid gap-5 md:grid-cols-3" aria-label="Pozos y Promociones">
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-5" aria-label="Pozos y Promociones">
           {topCards.map((card) => (
             <article
               key={card.title}
@@ -320,14 +328,14 @@ function WelcomeDashboard({ user, onViewMatches, onViewWallet }) {
                   }
                 }
               }}
-              className="relative overflow-hidden rounded-[24px] bg-[#0b132b] border border-slate-800/80 px-7 py-6 shadow-2xl shadow-black/60 transition-transform duration-300 hover:-translate-y-1 group cursor-pointer"
+              className="relative overflow-hidden rounded-2xl sm:rounded-[24px] bg-[#0b132b] border border-slate-800/80 px-5 py-4 sm:px-7 sm:py-6 shadow-2xl shadow-black/60 transition-transform duration-300 hover:-translate-y-1 group cursor-pointer"
             >
               <div className="relative z-10 flex flex-col justify-between h-full">
-                <h2 className="text-lg sm:text-xl font-extrabold uppercase tracking-wide text-[#39FF14]">
+                <h2 className="text-sm sm:text-xl font-extrabold uppercase tracking-wide text-[#39FF14]">
                   {card.title}
                 </h2>
 
-                <p className="mt-2.5 mb-1.5 text-3xl sm:text-4xl font-black tracking-tight text-[#39FF14]">
+                <p className="mt-1.5 sm:mt-2.5 mb-1 text-2xl sm:text-4xl font-black tracking-tight text-[#39FF14]">
                   {card.value}
                 </p>
 
@@ -466,39 +474,47 @@ function WelcomeDashboard({ user, onViewMatches, onViewWallet }) {
                 {liveMatches.map((match) => (
                   <div
                     key={match.codigo_partido}
-                    className="px-4 sm:px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-slate-900/50 transition"
+                    className="p-3.5 sm:px-6 sm:py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 sm:gap-4 hover:bg-slate-900/50 transition"
                   >
                     {/* Hora / Estado y Equipos con Escudos Oficiales */}
-                    <div className="flex items-center gap-4 min-w-0 flex-1">
-                      <div className="w-24 shrink-0 text-left">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-4 min-w-0 flex-1">
+                      <div className="flex items-center justify-between sm:block sm:w-24 shrink-0 text-left">
                         {match.estado_partido === 'En Vivo' ? (
-                          <div className="space-y-1">
+                          <div className="flex items-center sm:block gap-2">
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-red-500/20 border border-red-500/40 text-red-400 text-[11px] font-extrabold">
                               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
                               EN VIVO
                             </span>
                             {match.ciudad && (
-                              <span className="block text-[10px] text-slate-400 truncate">
+                              <span className="text-[11px] sm:text-[10px] text-slate-400 sm:block sm:mt-1 truncate">
                                 {match.ciudad}
                               </span>
                             )}
                           </div>
                         ) : (
-                          <div className="space-y-0.5">
-                            <span className="block text-xs text-slate-300 font-bold">
+                          <div className="flex items-center sm:block gap-2">
+                            <span className="text-xs text-slate-300 font-bold sm:block">
                               {match.hora}
                             </span>
-                            <span className="block text-[10px] text-slate-500">
+                            <span className="text-[11px] sm:text-[10px] text-slate-500 sm:block">
                               {match.nombre_jornada || 'Programado'}
                             </span>
                           </div>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={onViewMatches}
+                          className="sm:hidden text-[11px] font-bold text-[#39FF14] hover:underline cursor-pointer"
+                        >
+                          +{match.cuotas.mercados} mercados →
+                        </button>
                       </div>
 
-                      <div className="space-y-2.5 min-w-0 flex-1 pr-3">
+                      <div className="space-y-2 min-w-0 flex-1 sm:pr-3">
                         {/* Equipo Local */}
                         <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3 truncate">
+                          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                             <TeamShield teamName={match.equipo_local} size="md" />
                             <span className="text-sm font-extrabold text-white truncate">
                               {match.equipo_local}
@@ -513,7 +529,7 @@ function WelcomeDashboard({ user, onViewMatches, onViewWallet }) {
 
                         {/* Equipo Visitante */}
                         <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3 truncate">
+                          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                             <TeamShield teamName={match.equipo_visitante} size="md" />
                             <span className="text-sm font-extrabold text-white truncate">
                               {match.equipo_visitante}
@@ -528,14 +544,17 @@ function WelcomeDashboard({ user, onViewMatches, onViewWallet }) {
                       </div>
                     </div>
 
-                    {/* Botones de Cuotas estilo BetPlay (1 - X - 2 - Más de 2.5 - Menos de 2.5) */}
-                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 w-full sm:w-[520px]">
+                    {/* Botones de Cuotas estilo BetPlay (1 - X - 2 - Más de 2.5 - Ambos Marcan) 100% Responsivos y Conectados al Cupón */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 sm:gap-2 w-full lg:w-[520px]">
                         <button
                           type="button"
-                          onClick={onViewMatches}
-                          className="h-14 rounded-lg bg-[#0d1b3e] hover:bg-[#162a5c] border border-slate-800 hover:border-[#39FF14] flex flex-col items-center justify-center transition cursor-pointer"
+                          onClick={() =>
+                            handleQuickMarketClick(match, 'Gana Local', match.cuotas.local)
+                          }
+                          className="h-12 sm:h-14 rounded-lg bg-[#0d1b3e] hover:bg-[#162a5c] active:bg-[#39FF14] active:text-slate-950 border border-slate-800 hover:border-[#39FF14] flex flex-col items-center justify-center transition cursor-pointer"
                         >
+                          <span className="text-[10px] text-slate-400 lg:hidden">1 (Local)</span>
                           <span className="text-xs font-extrabold text-white">
                             {match.cuotas.local}
                           </span>
@@ -543,9 +562,12 @@ function WelcomeDashboard({ user, onViewMatches, onViewWallet }) {
 
                         <button
                           type="button"
-                          onClick={onViewMatches}
-                          className="h-14 rounded-lg bg-[#0d1b3e] hover:bg-[#162a5c] border border-slate-800 hover:border-[#39FF14] flex flex-col items-center justify-center transition cursor-pointer"
+                          onClick={() =>
+                            handleQuickMarketClick(match, 'Empate', match.cuotas.empate)
+                          }
+                          className="h-12 sm:h-14 rounded-lg bg-[#0d1b3e] hover:bg-[#162a5c] active:bg-[#39FF14] active:text-slate-950 border border-slate-800 hover:border-[#39FF14] flex flex-col items-center justify-center transition cursor-pointer"
                         >
+                          <span className="text-[10px] text-slate-400 lg:hidden">X (Empate)</span>
                           <span className="text-xs font-extrabold text-white">
                             {match.cuotas.empate}
                           </span>
@@ -553,9 +575,12 @@ function WelcomeDashboard({ user, onViewMatches, onViewWallet }) {
 
                         <button
                           type="button"
-                          onClick={onViewMatches}
-                          className="h-14 rounded-lg bg-[#0d1b3e] hover:bg-[#162a5c] border border-slate-800 hover:border-[#39FF14] flex flex-col items-center justify-center transition cursor-pointer"
+                          onClick={() =>
+                            handleQuickMarketClick(match, 'Gana Visitante', match.cuotas.visitante)
+                          }
+                          className="h-12 sm:h-14 rounded-lg bg-[#0d1b3e] hover:bg-[#162a5c] active:bg-[#39FF14] active:text-slate-950 border border-slate-800 hover:border-[#39FF14] flex flex-col items-center justify-center transition cursor-pointer"
                         >
+                          <span className="text-[10px] text-slate-400 lg:hidden">2 (Visita)</span>
                           <span className="text-xs font-extrabold text-white">
                             {match.cuotas.visitante}
                           </span>
@@ -563,10 +588,12 @@ function WelcomeDashboard({ user, onViewMatches, onViewWallet }) {
 
                         <button
                           type="button"
-                          onClick={onViewMatches}
-                          className="hidden sm:flex h-14 rounded-lg bg-[#0d1b3e] hover:bg-[#162a5c] border border-slate-800 hover:border-[#39FF14] flex-col items-center justify-center transition cursor-pointer"
+                          onClick={() =>
+                            handleQuickMarketClick(match, 'Más de 2.5 Goles', match.cuotas.mas25)
+                          }
+                          className="col-span-1 h-12 sm:h-14 rounded-lg bg-[#0d1b3e] hover:bg-[#162a5c] active:bg-[#39FF14] active:text-slate-950 border border-slate-800 hover:border-[#39FF14] flex flex-col items-center justify-center transition cursor-pointer"
                         >
-                          <span className="text-[11px] text-slate-300">+2.5 Goles</span>
+                          <span className="text-[10px] sm:text-[11px] text-slate-300">+2.5 Goles</span>
                           <span className="text-xs font-extrabold text-white">
                             {match.cuotas.mas25}
                           </span>
@@ -574,10 +601,12 @@ function WelcomeDashboard({ user, onViewMatches, onViewWallet }) {
 
                         <button
                           type="button"
-                          onClick={onViewMatches}
-                          className="hidden sm:flex h-14 rounded-lg bg-[#0d1b3e] hover:bg-[#162a5c] border border-slate-800 hover:border-[#39FF14] flex-col items-center justify-center transition cursor-pointer"
+                          onClick={() =>
+                            handleQuickMarketClick(match, 'Ambos Marcan', match.cuotas.ambos)
+                          }
+                          className="col-span-2 sm:col-span-1 h-12 sm:h-14 rounded-lg bg-[#0d1b3e] hover:bg-[#162a5c] active:bg-[#39FF14] active:text-slate-950 border border-slate-800 hover:border-[#39FF14] flex flex-col items-center justify-center transition cursor-pointer"
                         >
-                          <span className="text-[11px] text-slate-300">Ambos Marcan</span>
+                          <span className="text-[10px] sm:text-[11px] text-slate-300">Ambos Marcan</span>
                           <span className="text-xs font-extrabold text-white">
                             {match.cuotas.ambos}
                           </span>
@@ -587,7 +616,7 @@ function WelcomeDashboard({ user, onViewMatches, onViewWallet }) {
                       <button
                         type="button"
                         onClick={onViewMatches}
-                        className="w-20 text-left pl-2 text-xs font-bold text-slate-300 hover:text-[#39FF14] transition cursor-pointer shrink-0"
+                        className="hidden sm:block w-20 text-left pl-2 text-xs font-bold text-slate-300 hover:text-[#39FF14] transition cursor-pointer shrink-0"
                       >
                         {match.cuotas.mercados} Más
                         <span className="block text-[11px] font-normal text-slate-400">

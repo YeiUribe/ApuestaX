@@ -95,14 +95,39 @@ function AuthPage({ onLoginSuccess }) {
         </span>
       </div>
 
-      {/* Contenedor Principal de Autenticación */}
-      <div className="relative w-full max-w-5xl h-[720px] sm:h-[680px] bg-slate-900 rounded-3xl border border-slate-800/80 shadow-2xl shadow-black/80 overflow-hidden">
-        
+      {/* Contenedor Principal de Autenticación (Fluido en Móvil y 2 Paneles en Escritorio) */}
+      <div className="relative w-full max-w-5xl min-h-0 h-auto md:h-[680px] bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-800/80 shadow-2xl shadow-black/80 overflow-hidden">
+        {/* Selector de Pestaña Superior exclusivo para Celulares */}
+        <div className="md:hidden grid grid-cols-2 p-2 bg-slate-950/70 border-b border-slate-800 gap-1.5">
+          <button
+            type="button"
+            onClick={() => switchMode(true)}
+            className={`py-2.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+              isLogin
+                ? 'bg-[#39FF14] text-slate-950 shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Iniciar Sesión
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode(false)}
+            className={`py-2.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+              !isLogin
+                ? 'bg-[#39FF14] text-slate-950 shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Crear Cuenta
+          </button>
+        </div>
+
         {/* ========================================================================= */}
         {/* 1. FORMULARIO DE LOGIN (Lado Izquierdo) */}
         {/* ========================================================================= */}
         <div
-          className={`absolute top-0 left-0 w-full md:w-1/2 h-full flex-col justify-center items-center px-6 sm:px-12 py-8 z-10 ${
+          className={`relative md:absolute top-0 left-0 w-full md:w-1/2 h-auto md:h-full flex-col justify-center items-center px-5 sm:px-12 py-7 sm:py-8 z-10 ${
             isLogin ? 'flex' : 'hidden md:flex'
           }`}
         >
@@ -123,7 +148,6 @@ function AuthPage({ onLoginSuccess }) {
                 role="alert"
                 className="mb-4 p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs sm:text-sm font-medium flex items-start gap-2.5 shadow-lg shadow-emerald-950/30"
               >
-                <span className="text-emerald-400 font-bold text-base leading-none mt-0.5">✓</span>
                 <span>{message}</span>
               </div>
             )}
@@ -131,9 +155,8 @@ function AuthPage({ onLoginSuccess }) {
             {error && isLogin && (
               <div
                 role="alert"
-                className="mb-4 p-3.5 rounded-xl bg-red-500/15 border border-red-500/50 text-red-200 text-xs sm:text-sm font-medium flex items-start gap-2.5 shadow-lg shadow-red-950/40 animate-pulse"
+                className="mb-4 p-3.5 rounded-xl bg-red-500/15 border border-red-500/50 text-red-200 text-xs sm:text-sm font-medium flex items-start gap-2.5 shadow-lg shadow-red-950/40"
               >
-                <span className="text-red-400 font-bold text-base leading-none mt-0.5">⚠️</span>
                 <div>
                   <strong className="block text-red-300 font-bold mb-0.5">
                     Error de autenticación
@@ -230,7 +253,7 @@ function AuthPage({ onLoginSuccess }) {
         {/* 2. FORMULARIO DE REGISTRO (Lado Derecho) */}
         {/* ========================================================================= */}
         <div
-          className={`absolute top-0 right-0 w-full md:w-1/2 h-full flex-col justify-center items-center px-6 sm:px-10 py-6 z-10 overflow-y-auto ${
+          className={`relative md:absolute top-0 right-0 w-full md:w-1/2 h-auto md:h-full flex-col justify-center items-center px-5 sm:px-10 py-6 z-10 overflow-y-auto ${
             !isLogin ? 'flex' : 'hidden md:flex'
           }`}
         >
@@ -250,7 +273,6 @@ function AuthPage({ onLoginSuccess }) {
                 role="alert"
                 className="mb-4 p-3.5 rounded-xl bg-red-500/15 border border-red-500/50 text-red-200 text-xs sm:text-sm font-medium flex items-start gap-2.5 shadow-lg shadow-red-950/40"
               >
-                <span className="text-red-400 font-bold text-base leading-none mt-0.5">⚠️</span>
                 <div>
                   <strong className="block text-red-300 font-bold mb-0.5">
                     No se pudo completar el registro
@@ -260,8 +282,8 @@ function AuthPage({ onLoginSuccess }) {
               </div>
             )}
 
-            {/* Formulario en Grid de 2 Columnas */}
-            <form onSubmit={handleRegisterSubmit} className="grid grid-cols-2 gap-3 text-left">
+            {/* Formulario en Grid Responsivo (1 Columna en Celular, 2 en Tablet/Escritorio) */}
+            <form onSubmit={handleRegisterSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
               {/* 1. Nombre */}
               <div>
                 <label className="block text-[11px] font-medium text-slate-300 mb-1">
@@ -274,7 +296,7 @@ function AuthPage({ onLoginSuccess }) {
                   placeholder="Nombre"
                   value={registerData.nombre}
                   onChange={handleRegisterChange}
-                  className="w-full px-3 py-2 bg-slate-800 text-white placeholder-slate-500 text-xs sm:text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all"
+                  className="w-full px-3 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all"
                 />
               </div>
 
@@ -290,7 +312,7 @@ function AuthPage({ onLoginSuccess }) {
                   placeholder="Apellido"
                   value={registerData.apellido}
                   onChange={handleRegisterChange}
-                  className="w-full px-3 py-2 bg-slate-800 text-white placeholder-slate-500 text-xs sm:text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all"
+                  className="w-full px-3 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all"
                 />
               </div>
 
@@ -306,7 +328,7 @@ function AuthPage({ onLoginSuccess }) {
                   placeholder="correo@ejemplo.com"
                   value={registerData.correo}
                   onChange={handleRegisterChange}
-                  className="w-full px-3 py-2 bg-slate-800 text-white text-xs sm:text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all cursor-pointer"
+                  className="w-full px-3 py-2.5 bg-slate-800 text-white text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all cursor-pointer"
                 />
               </div>
 
@@ -322,12 +344,12 @@ function AuthPage({ onLoginSuccess }) {
                   placeholder="1000000000"
                   value={registerData.cedula}
                   onChange={handleRegisterChange}
-                  className="w-full px-3 py-2 bg-slate-800 text-white placeholder-slate-500 text-xs sm:text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all"
+                  className="w-full px-3 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all"
                 />
               </div>
 
               {/* 5. Contraseña */}
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="block text-[11px] font-medium text-slate-300 mb-1">
                   Contraseña
                 </label>
@@ -338,12 +360,12 @@ function AuthPage({ onLoginSuccess }) {
                   placeholder="••••••••"
                   value={registerData.contraseña}
                   onChange={handleRegisterChange}
-                  className="w-full px-3 py-2 bg-slate-800 text-white placeholder-slate-500 text-xs sm:text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all [color-scheme:dark]"
+                  className="w-full px-3 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all [color-scheme:dark]"
                 />
               </div>
 
-              {/* Botón Registrar (Ocupa las 2 columnas) */}
-              <div className="col-span-2 pt-2">
+              {/* Botón Registrar */}
+              <div className="sm:col-span-2 pt-2">
                 <button
                   type="submit"
                   className="w-full py-3 bg-[#39FF14] text-slate-950 font-bold rounded-xl text-sm transition-all duration-200 hover:brightness-110 active:scale-[0.98] shadow-lg shadow-[#39FF14]/20 cursor-pointer"

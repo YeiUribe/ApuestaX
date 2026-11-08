@@ -500,22 +500,22 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
           <p className="text-xs sm:text-sm text-slate-400 mt-1">{sectionMeta.subtitle}</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3 shadow-lg">
-            <span className="block text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-              Saldo Real Disponible
+        <div className="grid grid-cols-2 sm:flex items-center gap-2.5 sm:gap-3 w-full md:w-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-3.5 sm:px-5 py-2.5 sm:py-3 shadow-lg">
+            <span className="block text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400 font-semibold truncate">
+              Saldo Disponible
             </span>
-            <span className="text-xl sm:text-2xl font-black text-[#39FF14]">
-              ${saldo.toLocaleString('es-CO')} <span className="text-xs font-bold text-slate-300">COP</span>
+            <span className="text-base sm:text-2xl font-black text-[#39FF14]">
+              ${saldo.toLocaleString('es-CO')} <span className="text-[10px] sm:text-xs font-bold text-slate-300">COP</span>
             </span>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3 shadow-lg">
-            <span className="block text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-3.5 sm:px-5 py-2.5 sm:py-3 shadow-lg">
+            <span className="block text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400 font-semibold truncate">
               Bono Activo
             </span>
-            <span className="text-xl sm:text-2xl font-black text-white">
-              ${bonoActivo.toLocaleString('es-CO')} <span className="text-xs font-bold text-[#39FF14]">COP</span>
+            <span className="text-base sm:text-2xl font-black text-white">
+              ${bonoActivo.toLocaleString('es-CO')} <span className="text-[10px] sm:text-xs font-bold text-[#39FF14]">COP</span>
             </span>
           </div>
         </div>
