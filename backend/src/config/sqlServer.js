@@ -5,7 +5,7 @@ const requiredVariables = [
     'DB_SERVER',
     'DB_NAME',
     'DB_USER',
-    'DB_PASSWORD',
+    'DB_PASSWORD'
 ];
 
 const missingVariables = requiredVariables.filter(
@@ -18,44 +18,37 @@ if (missingVariables.length > 0) {
     );
 }
 
-const port = Number(process.env.DB_PORT || 1433);
-
-const [server, instanceFromServer] = (
-    process.env.DB_SERVER || 'localhost'
-).split('\\', 2);
-
-const instanceName =
-    process.env.DB_INSTANCE || instanceFromServer;
-
 const config = {
-    server,
-    database: process.env.DB_NAME || 'Apuestas',
+    server: process.env.DB_SERVER,
+    port: Number(process.env.DB_PORT || 1433),
+
+    database: process.env.DB_NAME,
+
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
 
-    connectionTimeout: 30000,
-    requestTimeout: 30000,
+    connectionTimeout: 60000,
+    requestTimeout: 60000,
 
     pool: {
         max: 10,
         min: 0,
-        idleTimeoutMillis: 30000,
+        idleTimeoutMillis: 30000
     },
 
     options: {
-        ...(instanceName ? { instanceName } : {}),
-
-        encrypt:
-            process.env.DB_ENCRYPT === 'true',
-
-        trustServerCertificate:
-            process.env.DB_TRUST_SERVER_CERTIFICATE !== 'false',
-    },
+        encrypt: true,
+        trustServerCertificate: false
+    }
 };
 
-if (!instanceName) {
-    config.port = port;
-}
+console.log('[SQL Server] Configuración:');
+console.log(`Servidor: ${config.server}`);
+console.log(`Puerto: ${config.port}`);
+console.log(`Base: ${config.database}`);
+console.log(`Usuario: ${config.user}`);
+console.log('Encrypt: true');
+console.log('TrustServerCertificate: false');
 
 const poolPromise = new sql.ConnectionPool(config)
     .connect()
@@ -81,8 +74,6 @@ const poolPromise = new sql.ConnectionPool(config)
             `[SQL Server] Conectado exitosamente a la base de datos "${config.database}"`
         );
 
-        // IMPORTANTE:
-        // devolver el pool conectado para que server.js pueda usarlo
         return pool;
     })
     .catch((error) => {
@@ -92,10 +83,24 @@ const poolPromise = new sql.ConnectionPool(config)
             error.message
         );
 
+        if (error.code) {
+            console.error(
+                '[SQL Server] Código:',
+                error.code
+            );
+        }
+
+        if (error.originalError) {
+            console.error(
+                '[SQL Server] Error original:',
+                error.originalError.message
+            );
+        }
+
         throw error;
     });
 
 module.exports = {
     sql,
-    poolPromise,
+    poolPromise
 };
