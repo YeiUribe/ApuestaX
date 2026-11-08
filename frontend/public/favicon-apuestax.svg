@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <style>
+      .bg { fill: #0f172a; }
+      .border { fill: none; stroke: #39FF14; stroke-width: 6; }
+      .text { 
+        font-family: 'Inter', system-ui, sans-serif; 
+        font-weight: 900; 
+        font-size: 65px; 
+        fill: #39FF14; 
+      }
+    </style>
+  </defs>
+  <!-- Cuadro redondeado oscuro -->
+  <rect class="bg" width="90" height="90" x="5" y="5" rx="20" />
+  <!-- Borde verde neón -->
+  <rect class="border" width="90" height="90" x="5" y="5" rx="20" />
+  <!-- Letra A centrada -->
+  <text x="50" y="70" class="text" text-anchor="middle">A</text>
+</svg>

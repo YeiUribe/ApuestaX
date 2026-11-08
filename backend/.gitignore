@@ -1,0 +1,10 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno
+.env
+
+# Archivos de log
+*.log
+logs/
+src/config/firebase-key.json

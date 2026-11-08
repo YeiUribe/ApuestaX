@@ -1,0 +1,428 @@
+import { useState, useEffect, useRef } from 'react';
+import UserList from './components/UserList';
+import AuthPage from './components/Login';
+import WelcomeDashboard from './components/WelcomeDashboard';
+import MatchesPanel from './components/MatchesPanel';
+import WalletPanel from './components/WalletPanel';
+import { logoutSession, getWallet } from './services/userService';
+
+function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' | 'matches' | 'wallet' | 'users'
+  const [walletSection, setWalletSection] = useState('recarga'); // 'recarga' | 'retiro' | 'historial' | 'promocion' | 'puntos' | 'cuenta' | 'ayuda'
+
+  // Menú desplegable superior derecho (estilo BetPlay / ApuestaX)
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  // Cronómetro de sesión en vivo (HH:MM:SS)
+  const [sessionSeconds, setSessionSeconds] = useState(0);
+
+  // Saldos en vivo para el menú desplegable del Usuario
+  const [saldoReal, setSaldoReal] = useState(0);
+  const [bonoActivo, setBonoActivo] = useState(0);
+  const [bonoPendiente, setBonoPendiente] = useState(0);
+  const [refreshingBalance, setRefreshingBalance] = useState(false);
+
+  const isAdmin = currentUser?.nombre_rol === 'Administrador';
+
+  // Cargar billetera del usuario autenticado
+  const fetchUserBalance = async (cedula) => {
+    if (!cedula) return;
+    setRefreshingBalance(true);
+    try {
+      const data = await getWallet(cedula);
+      if (data && data.saldo_disponible !== undefined) {
+        const totalDisponible = Number(data.saldo_disponible) || 0;
+        const movs = Array.isArray(data.movimientos) ? data.movimientos : [];
+        const totalBonosHist = movs
+          .filter((m) => String(m.nombre_tipo || '').toLowerCase().includes('bono'))
+          .reduce((acc, m) => acc + (Number(m.monto) || 0), 0);
+        const totalRecargasYPremios = movs
+          .filter(
+            (m) =>
+              !String(m.nombre_tipo || '').toLowerCase().includes('bono') &&
+              (m.naturaleza_movimiento === 'Ingreso' ||
+                ['Recarga PSE', 'Recarga Manual', 'Pago Premio', 'Reembolso Apuesta'].includes(m.nombre_tipo))
+          )
+          .reduce((acc, m) => acc + (Number(m.monto) || 0), 0);
+
+        const real = Math.min(totalDisponible, totalRecargasYPremios);
+        const bono = Math.max(0, Math.min(totalDisponible - real, totalBonosHist || 20000));
+
+        setSaldoReal( totalDisponible - bono );
+        setBonoActivo(bono);
+        setBonoPendiente(0);
+      }
+    } catch {
+      // Mantiene el último valor conocido
+    } finally {
+      setTimeout(() => setRefreshingBalance(false), 300);
+    }
+  };
+
+  useEffect(() => {
+    if (!currentUser) {
+      setSessionSeconds(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setSessionSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser || currentUser.nombre_rol === 'Administrador') {
+      return;
+    }
+
+    // Consultar inmediatamente
+    fetchUserBalance(currentUser.cedula);
+
+    // Actualizar el saldo cada 5 segundos
+    const balanceTimer = setInterval(() => {
+      fetchUserBalance(currentUser.cedula);
+    }, 5000);
+
+    return () => clearInterval(balanceTimer);
+  }, [currentUser, currentView]);
+
+
+  // Cerrar el menú flotante al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const formatSessionTime = (totalSec) => {
+    const hrs = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+    const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+    const secs = String(totalSec % 60).padStart(2, '0');
+    return `${hrs}:${mins}:${secs}`;
+  };
+
+  const handleLoginSuccess = (user) => {
+    setCurrentUser(user);
+    setCurrentView('dashboard');
+    setSessionSeconds(0);
+    setMenuOpen(false);
+  };
+
+  const handleLogout = () => {
+    logoutSession();
+    setCurrentUser(null);
+    setCurrentView('dashboard');
+    setMenuOpen(false);
+  };
+
+  const openUserSection = (section) => {
+    setWalletSection(section);
+    setCurrentView('wallet');
+    setMenuOpen(false);
+  };
+
+  // Si el usuario no ha iniciado sesión, solo puede ver la pantalla de Autenticación
+  if (!currentUser) {
+    return <AuthPage onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  const saldoTotal = saldoReal + bonoActivo;
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+      {/* Barra de navegación superior según el rol autenticado */}
+      <nav className="w-full bg-[#060d24] border-b border-slate-800/90 px-4 sm:px-8 py-3 flex flex-wrap items-center justify-between gap-4 z-40 sticky top-0 shadow-lg">
+        {/* Logo de Marca */}
+        <div
+          onClick={() => setCurrentView('dashboard')}
+          className="flex items-center gap-2.5 cursor-pointer"
+        >
+          <span className="w-8 h-8 rounded-lg bg-slate-900 border border-[#39FF14]/50 flex items-center justify-center text-[#39FF14] font-black text-base shadow-sm">
+            A
+          </span>
+          <span className="font-extrabold text-lg text-white tracking-wide">
+            APUESTA<span className="text-[#39FF14]">X</span>
+          </span>
+          {isAdmin && (
+            <span className="ml-1 px-2 py-0.5 rounded-md bg-[#39FF14]/15 border border-[#39FF14]/40 text-[10px] font-extrabold uppercase text-[#39FF14]">
+              Consola Admin
+            </span>
+          )}
+        </div>
+
+        {/* Pestañas centrales de navegación */}
+        <div className="flex flex-wrap items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 gap-1">
+          <button
+            type="button"
+            onClick={() => setCurrentView('dashboard')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${currentView === 'dashboard'
+                ? 'bg-[#39FF14] text-slate-950 shadow-sm'
+                : 'text-slate-300 hover:text-white'
+              }`}
+          >
+            {isAdmin ? 'Consola Principal' : 'Inicio'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCurrentView('matches')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${currentView === 'matches'
+                ? 'bg-[#39FF14] text-slate-950 shadow-sm'
+                : 'text-slate-300 hover:text-white'
+              }`}
+          >
+            {isAdmin ? 'Control de Partidos' : 'Deportes • Liga BetPlay'}
+          </button>
+
+          {!isAdmin && (
+            <>
+              <button
+                type="button"
+                onClick={() => openUserSection('historial')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${currentView === 'wallet' && walletSection === 'historial'
+                    ? 'bg-[#39FF14] text-slate-950 shadow-sm'
+                    : 'text-slate-300 hover:text-white'
+                  }`}
+              >
+                Mis Apuestas
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openUserSection('recarga')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${currentView === 'wallet' && (walletSection === 'recarga' || walletSection === 'retiro')
+                    ? 'bg-[#39FF14] text-slate-950 shadow-sm'
+                    : 'text-[#39FF14] hover:bg-[#39FF14]/15'
+                  }`}
+              >
+                + Recargar
+              </button>
+            </>
+          )}
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setCurrentView('users')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${currentView === 'users'
+                  ? 'bg-[#39FF14] text-slate-950 shadow-sm'
+                  : 'text-slate-300 hover:text-white'
+                }`}
+            >
+              Usuarios y Auditoría
+            </button>
+          )}
+        </div>
+
+        {/* Zona Derecha: Nombre del Usuario, Cronómetro de Sesión y Menú Desplegable (⋮) */}
+        {isAdmin ? (
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex flex-col text-right">
+              <span className="text-xs font-bold text-white leading-tight">
+                {currentUser.nombre} {currentUser.apellido}
+              </span>
+              <span className="text-[11px] font-semibold text-[#39FF14]">
+                Sesión {formatSessionTime(sessionSeconds)}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-red-500/15 text-slate-300 hover:text-red-300 border border-slate-700 hover:border-red-500/30 text-xs font-semibold transition cursor-pointer"
+            >
+              Cerrar Sesión
+            </button>
+          </div>
+        ) : (
+          <div className="relative" ref={menuRef}>
+            <div
+              onClick={() => {
+                if (!menuOpen) fetchUserBalance(currentUser.cedula);
+                setMenuOpen((prev) => !prev);
+              }}
+              className="flex items-center gap-3.5 px-3 py-1.5 rounded-xl hover:bg-slate-800/70 transition cursor-pointer select-none"
+            >
+              <span className="text-sm font-semibold text-white tracking-tight">
+                {currentUser.nombre} {currentUser.apellido}
+              </span>
+
+              <div className="flex flex-col items-center text-[11px] leading-tight text-slate-300 font-medium">
+                <span>Sesión</span>
+                <span className="font-mono text-white">{formatSessionTime(sessionSeconds)}</span>
+              </div>
+
+              <button
+                type="button"
+                aria-label="Abrir menú de usuario y saldo"
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white hover:bg-slate-700/80 transition cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <circle cx="12" cy="5" r="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <circle cx="12" cy="19" r="2" />
+                </svg>
+              </button>
+            </div>
+
+            {/* MENÚ DESPLEGABLE DE SALDO Y OPCIONES CON LOS COLORES DEL PROYECTO (#0b132b + #39FF14) */}
+            {menuOpen && (
+              <div className="absolute right-0 mt-2.5 w-72 rounded-2xl bg-[#0b132b] text-slate-100 shadow-2xl shadow-black/80 border border-slate-700/90 py-5 px-6 z-50 animate-fadeIn">
+                {/* Bloque de Saldos con botón de refrescar */}
+                <div className="space-y-2.5 text-sm pb-4 border-b border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300 font-medium">Saldo:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-[#39FF14] font-mono">
+                        ${saldoTotal.toLocaleString('es-CO')}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          fetchUserBalance(currentUser.cedula);
+                        }}
+                        title="Actualizar saldo"
+                        className={`text-slate-300 hover:text-[#39FF14] transition cursor-pointer ${refreshingBalance ? 'animate-spin text-[#39FF14]' : ''
+                          }`}
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pr-6">
+                    <span className="text-slate-300 font-medium">Saldo Real:</span>
+                    <span className="font-bold text-white font-mono">
+                      ${saldoReal.toLocaleString('es-CO')}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between pr-6">
+                    <span className="text-slate-300 font-medium">Bono Activo:</span>
+                    <span className="font-bold text-[#39FF14] font-mono">
+                      ${bonoActivo.toLocaleString('es-CO')}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between pr-6">
+                    <span className="text-slate-300 font-medium">Bono Pendiente:</span>
+                    <span className="font-bold text-slate-400 font-mono">
+                      ${bonoPendiente.toLocaleString('es-CO')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Lista de Navegación Consolidada y sin botones redundantes */}
+                <div className="py-3 space-y-1 text-sm">
+                  {[
+                    { id: 'recarga', label: 'Recargar y Retirar' },
+                    { id: 'historial', label: 'Mis Apuestas y Movimientos' },
+                    { id: 'promocion', label: 'Bonos y Puntos ApuestaX' },
+                    { id: 'cuenta', label: 'Mi Cuenta' },
+                    { id: 'ayuda', label: 'Ayuda y Reglas' },
+                  ].map((item) => {
+                    const isActive =
+                      currentView === 'wallet' &&
+                      (walletSection === item.id ||
+                        (item.id === 'recarga' && walletSection === 'retiro') ||
+                        (item.id === 'promocion' && walletSection === 'puntos'));
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => openUserSection(item.id)}
+                        className={`w-full text-left py-2 px-3 rounded-xl font-medium transition cursor-pointer flex items-center justify-between ${isActive
+                            ? 'bg-[#39FF14]/15 text-[#39FF14] font-bold'
+                            : 'text-slate-300 hover:text-[#39FF14] hover:bg-slate-800/70'
+                          }`}
+                      >
+                        <span>{item.label}</span>
+                        {isActive && <span className="w-1.5 h-1.5 rounded-full bg-[#39FF14]" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Botón Cerrar Sesión centrado */}
+                <div className="pt-2 border-t border-slate-800/80 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="mt-2 px-6 py-2 rounded-xl border border-[#39FF14]/50 bg-slate-900 hover:bg-[#39FF14] text-[#39FF14] hover:text-slate-950 font-extrabold text-xs uppercase tracking-wider transition cursor-pointer shadow-md"
+                  >
+                    Cerrar Sesión
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </nav>
+
+      {/* Renderizado de la vista seleccionada */}
+      {currentView === 'dashboard' ? (
+        <WelcomeDashboard
+          user={currentUser}
+          onViewMatches={() => setCurrentView('matches')}
+          onViewWallet={(sec = 'recarga') => {
+            if (isAdmin) {
+              setCurrentView('users');
+            } else {
+              openUserSection(sec);
+            }
+          }}
+        />
+      ) : currentView === 'matches' ? (
+        <MatchesPanel user={currentUser} />
+      ) : currentView === 'wallet' && !isAdmin ? (
+        <WalletPanel
+          user={currentUser}
+          initialSection={walletSection}
+          onBalanceChange={() => fetchUserBalance(currentUser.cedula)}
+        />
+      ) : isAdmin ? (
+        <div className="flex-1 flex flex-col items-center justify-start py-10 px-4 sm:px-6 lg:px-8">
+          <header className="text-center max-w-xl mb-10">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white mb-3">
+              Gestión de <span className="text-apuestax-neon">Usuarios</span>
+            </h1>
+
+            <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
+              Control de cuentas, roles de acceso, empresas operadoras y auditoría en{' '}
+              <span className="font-semibold text-slate-200">Apuestax</span>.
+            </p>
+          </header>
+
+          <main className="w-full max-w-5xl">
+            <UserList />
+          </main>
+
+          <footer className="mt-16 text-center text-xs text-slate-500">
+            <p>© 2026 Apuestax. Todos los derechos reservados.</p>
+          </footer>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export default App;
