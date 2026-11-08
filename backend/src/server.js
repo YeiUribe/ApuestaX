@@ -1,542 +1,1601 @@
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
+
 require('dotenv').config();
 
-// Conexiones de Base de Datos
-const { poolPromise: sqlServerPool, sql } = require('./config/sqlServer');
+
+// =====================================================================
+// CONEXIONES DE BASES DE DATOS
+// =====================================================================
+
+const {
+    poolPromise: sqlServerPool,
+    sql,
+} = require('./config/sqlServer');
+
 const mysqlPool = require('./config/mysql');
 const pgPool = require('./config/postgres');
 const mongoose = require('./config/mongo');
-const { firebaseConfig, isFirebaseConfigured } = require('./config/firebase');
+const dbFirebase = require('./config/firebase');
 
-// Módulos y Middlewares
+
+// =====================================================================
+// MÓDULOS Y MIDDLEWARES
+// =====================================================================
+
 const sportsRoutes = require('./modules/sports/sportsRoutes');
 const bettingRoutes = require('./modules/betting/bettingRoutes');
 const rulesRoutes = require('./modules/rules/rulesRoutes');
 const paymentRoutes = require('./modules/payments/paymentRoutes');
-const { generarToken } = require('./middlewares/authMiddleware');
-const { Regla, MercadoApuesta, LoginAudit, defaultMercados, defaultReglas } = require('./modules/rules/mongoSchemas');
+
+const {
+    generarToken,
+} = require('./middlewares/authMiddleware');
+
+const {
+    Regla,
+    MercadoApuesta,
+    LoginAudit,
+    defaultMercados,
+    defaultReglas,
+} = require('./modules/rules/mongoSchemas');
+
+
+// =====================================================================
+// CONFIGURACIÓN DE EXPRESS
+// =====================================================================
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+
+app.set('trust proxy', 1);
+
 
 // =====================================================================
-// 1. HEALTHCHECK DIAGNÓSTICO (Monitoreo de todas las bases de datos)
+// CONFIGURACIÓN DE CORS
 // =====================================================================
+
+const allowedOrigins = (
+    process.env.FRONTEND_URL ||
+    'http://localhost:5173'
+)
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+app.use(
+    cors({
+        origin(origin, callback) {
+            /*
+             * Peticiones como Postman, PowerShell, Azure Health Check
+             * y aplicaciones servidor a servidor pueden no traer Origin.
+             */
+            if (!origin) {
+                return callback(null, true);
+            }
+
+            if (allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+
+            console.warn(
+                `[CORS] Origen rechazado: ${origin}`
+            );
+
+            return callback(
+                new Error(
+                    `Origen no permitido por CORS: ${origin}`
+                )
+            );
+        },
+        credentials: true,
+        methods: [
+            'GET',
+            'POST',
+            'PUT',
+            'PATCH',
+            'DELETE',
+            'OPTIONS',
+        ],
+        allowedHeaders: [
+            'Content-Type',
+            'Authorization',
+        ],
+    })
+);
+
+app.use(express.json({
+    limit: '1mb',
+}));
+
+app.use(express.urlencoded({
+    extended: true,
+    limit: '1mb',
+}));
+
+
+// =====================================================================
+// RUTA PRINCIPAL
+// =====================================================================
+
+app.get('/', (req, res) => {
+    return res.json({
+        application: 'ApuestaX Backend',
+        status: 'Online',
+        environment:
+            process.env.NODE_ENV || 'development',
+        healthcheck: '/api/health',
+        timestamp: new Date().toISOString(),
+    });
+});
+
+
+// =====================================================================
+// 1. HEALTHCHECK DIAGNÓSTICO
+// =====================================================================
+
 app.get('/api/health', async (req, res) => {
     const health = {
         server: 'Online',
+        environment:
+            process.env.NODE_ENV || 'development',
         timestamp: new Date().toISOString(),
+
         databases: {
             sqlServer: 'Desconectado',
             mySQL: 'Desconectado',
             postgreSQL: 'Desconectado',
-            mongoDB: mongoose.connection.readyState === 1 ? 'Conectado' : 'Desconectado',
-            firebase: isFirebaseConfigured ? `Conectado (${firebaseConfig.projectId})` : 'Desconectado',
+
+            mongoDB:
+                mongoose.connection.readyState === 1
+                    ? 'Conectado'
+                    : 'Desconectado',
+
+            firebase:
+                dbFirebase
+                    ? `Configurado (${process.env.FIREBASE_PROJECT_ID ||
+                    'apuestax-pagos'
+                    })`
+                    : 'Desconectado',
         },
     };
 
-    // Test SQL Server
+
+    // -----------------------------------------------------------------
+    // SQL Server
+    // -----------------------------------------------------------------
+
     try {
         const pool = await sqlServerPool;
+
         if (pool) {
-            await pool.request().query('SELECT 1');
-            health.databases.sqlServer = 'Conectado';
+            await pool
+                .request()
+                .query('SELECT 1 AS ok');
+
+            health.databases.sqlServer =
+                'Conectado';
         }
-    } catch {
-        health.databases.sqlServer = 'Error de conexión';
+    } catch (error) {
+        health.databases.sqlServer =
+            'Error de conexión';
+
+        console.error(
+            '[Health] SQL Server:',
+            error.message
+        );
     }
 
-    // Test MySQL
+
+    // -----------------------------------------------------------------
+    // MySQL
+    // -----------------------------------------------------------------
+
     try {
         if (mysqlPool) {
-            await mysqlPool.query('SELECT 1');
-            health.databases.mySQL = 'Conectado';
+            await mysqlPool.query(
+                'SELECT 1 AS ok'
+            );
+
+            health.databases.mySQL =
+                'Conectado';
         }
-    } catch {
-        health.databases.mySQL = 'Error de conexión';
+    } catch (error) {
+        health.databases.mySQL =
+            'Error de conexión';
+
+        console.error(
+            '[Health] MySQL:',
+            error.message
+        );
     }
 
-    // Test PostgreSQL
+
+    // -----------------------------------------------------------------
+    // PostgreSQL
+    // -----------------------------------------------------------------
+
     try {
         if (pgPool) {
-            await pgPool.query('SELECT 1');
-            health.databases.postgreSQL = 'Conectado';
+            await pgPool.query(
+                'SELECT 1 AS ok'
+            );
+
+            health.databases.postgreSQL =
+                'Conectado';
         }
-    } catch {
-        health.databases.postgreSQL = 'Error de conexión';
+    } catch (error) {
+        health.databases.postgreSQL =
+            'Error de conexión';
+
+        console.error(
+            '[Health] PostgreSQL:',
+            error.message
+        );
     }
 
-    res.json(health);
+
+    const databaseStatuses =
+        Object.values(health.databases);
+
+    const hasDatabaseError =
+        databaseStatuses.some(
+            (status) =>
+                status === 'Error de conexión'
+        );
+
+    health.status = hasDatabaseError
+        ? 'Degradado'
+        : 'Operativo';
+
+    return res.status(
+        hasDatabaseError ? 503 : 200
+    ).json(health);
 });
 
-// =====================================================================
-// 2. RUTAS MODULARES (Arquitectura Políglota)
-// =====================================================================
-app.use('/api/sports', sportsRoutes);     // MySQL: Deportes, Ligas, Equipos, Partidos
-app.use('/api/betting', bettingRoutes);   // PostgreSQL: Cuentas, Billeteras, Apuestas
-app.use('/api/rules', rulesRoutes);       // MongoDB: Reglas, Mercados, Logs
-app.use('/api/payments', paymentRoutes);  // Pasarela PSE / Wompi Sandbox
 
 // =====================================================================
-// 2.1 ENDPOINT ORQUESTADOR MULTIBASE: GET /api/dashboard/:cedula
-// Combina en Node.js (sin joins entre motores): SQL Server + MySQL + PostgreSQL + MongoDB
+// 2. RUTAS MODULARES
 // =====================================================================
+
+app.use(
+    '/api/sports',
+    sportsRoutes
+);
+
+app.use(
+    '/api/betting',
+    bettingRoutes
+);
+
+app.use(
+    '/api/rules',
+    rulesRoutes
+);
+
+app.use(
+    '/api/payments',
+    paymentRoutes
+);
+
+
+// =====================================================================
+// 2.1 DASHBOARD MULTIBASE
+// GET /api/dashboard/:cedula
+// =====================================================================
+
 app.get('/api/dashboard/:cedula', async (req, res) => {
     const { cedula } = req.params;
+
+    if (!cedula?.trim()) {
+        return res.status(400).json({
+            message:
+                'La cédula es obligatoria.',
+        });
+    }
+
+
+    /*
+     * Los valores iniciales deben ser seguros.
+     * Si PostgreSQL no responde, no se debe inventar saldo.
+     */
     const responseData = {
         usuario: null,
-        saldo: { cedula_usuario: cedula, saldo_disponible: 150000 },
+
+        saldo: {
+            cedula_usuario: cedula,
+            saldo_disponible: 0,
+            ultima_actualizacion: null,
+        },
+
         apuestasRecientes: [],
         proximosPartidos: [],
         mercados: defaultMercados,
         reglas: defaultReglas,
     };
 
-    // 1. SQL Server: Usuario
+
+    // -----------------------------------------------------------------
+    // SQL Server: usuario
+    // -----------------------------------------------------------------
+
     try {
         const pool = await sqlServerPool;
+
         if (pool) {
-            const userRes = await pool
+            const userResult = await pool
                 .request()
-                .input('cedula', sql.VarChar(20), cedula)
-                .query('SELECT cedula, nombre_rol, nombre, apellido, correo, estado FROM usuario WHERE cedula = @cedula');
-            if (userRes.recordset.length > 0) {
-                responseData.usuario = userRes.recordset[0];
+
+                .input(
+                    'cedula',
+                    sql.VarChar(20),
+                    cedula
+                )
+
+                .query(`
+                    SELECT
+                        cedula,
+                        nombre_rol,
+                        nombre,
+                        apellido,
+                        correo,
+                        estado
+                    FROM usuario
+                    WHERE cedula = @cedula
+                `);
+
+            if (
+                userResult.recordset.length > 0
+            ) {
+                responseData.usuario =
+                    userResult.recordset[0];
             }
         }
-    } catch {
-        // Fallback silencioso si SQL Server no responde
+    } catch (error) {
+        console.error(
+            '[Dashboard] Error SQL Server:',
+            error.message
+        );
     }
 
-    // 2. MySQL: Próximos partidos de la Liga BetPlay Dimayor
+
+    // -----------------------------------------------------------------
+    // MySQL: próximos partidos
+    // -----------------------------------------------------------------
+
     try {
         if (mysqlPool) {
-            const [matches] = await mysqlPool.query(
-                `SELECT codigo_partido, codigo_jornada, equipo_local, equipo_visitante, fecha_hora, marcador_local, marcador_visitante, estado_partido
-                 FROM partido
-                 ORDER BY fecha_hora ASC
-                 LIMIT 5`
-            );
-            responseData.proximosPartidos = matches;
+            const [matches] =
+                await mysqlPool.query(`
+                    SELECT
+                        codigo_partido,
+                        codigo_jornada,
+                        equipo_local,
+                        equipo_visitante,
+                        fecha_hora,
+                        marcador_local,
+                        marcador_visitante,
+                        estado_partido
+                    FROM partido
+                    ORDER BY fecha_hora ASC
+                    LIMIT 5
+                `);
+
+            responseData.proximosPartidos =
+                matches;
         }
-    } catch {
-        // Fallback silencioso si MySQL no responde
+    } catch (error) {
+        console.error(
+            '[Dashboard] Error MySQL:',
+            error.message
+        );
     }
 
-    // 3. PostgreSQL: Saldo y Apuestas Recientes
+
+    // -----------------------------------------------------------------
+    // PostgreSQL: billetera y apuestas
+    // -----------------------------------------------------------------
+
     try {
         if (pgPool) {
-            const walletRes = await pgPool.query(
-                'SELECT cedula_usuario, saldo_disponible, ultima_actualizacion FROM billetera WHERE cedula_usuario = $1',
-                [cedula]
-            );
-            if (walletRes.rows.length > 0) {
-                responseData.saldo = walletRes.rows[0];
+            const walletResult =
+                await pgPool.query(
+                    `
+                    SELECT
+                        cedula_usuario,
+                        saldo_disponible,
+                        ultima_actualizacion
+                    FROM billetera
+                    WHERE cedula_usuario = $1
+                    `,
+                    [cedula]
+                );
+
+            if (
+                walletResult.rows.length > 0
+            ) {
+                responseData.saldo =
+                    walletResult.rows[0];
             }
 
-            const ticketsRes = await pgPool.query(
-                `SELECT codigo_ticket, cedula_usuario, origen_fondos, monto_total, posible_ganancia_total, estado_ticket, fecha_emision
-                 FROM ticket_apuesta
-                 WHERE cedula_usuario = $1
-                 ORDER BY fecha_emision DESC
-                 LIMIT 5`,
-                [cedula]
-            );
-            responseData.apuestasRecientes = ticketsRes.rows;
+
+            const ticketsResult =
+                await pgPool.query(
+                    `
+                    SELECT
+                        codigo_ticket,
+                        cedula_usuario,
+                        origen_fondos,
+                        monto_total,
+                        posible_ganancia_total,
+                        estado_ticket,
+                        fecha_emision
+                    FROM ticket_apuesta
+                    WHERE cedula_usuario = $1
+                    ORDER BY fecha_emision DESC
+                    LIMIT 5
+                    `,
+                    [cedula]
+                );
+
+            responseData.apuestasRecientes =
+                ticketsResult.rows;
         }
-    } catch {
-        // Fallback silencioso si PostgreSQL no responde
+    } catch (error) {
+        console.error(
+            '[Dashboard] Error PostgreSQL:',
+            error.message
+        );
     }
 
-    // 4. MongoDB: Mercados y Reglas activas
+
+    // -----------------------------------------------------------------
+    // MongoDB: mercados y reglas
+    // -----------------------------------------------------------------
+
     try {
-        if (mongoose.connection.readyState === 1) {
-            const [mercados, reglas] = await Promise.all([
-                MercadoApuesta.find({ activo: true }),
+        if (
+            mongoose.connection.readyState === 1
+        ) {
+            const [
+                mercados,
+                reglas,
+            ] = await Promise.all([
+                MercadoApuesta.find({
+                    activo: true,
+                }),
+
                 Regla.find(),
             ]);
-            if (mercados.length > 0) responseData.mercados = mercados;
-            if (reglas.length > 0) responseData.reglas = reglas;
+
+            if (mercados.length > 0) {
+                responseData.mercados =
+                    mercados;
+            }
+
+            if (reglas.length > 0) {
+                responseData.reglas =
+                    reglas;
+            }
         }
-    } catch {
-        // Usa defaults
+    } catch (error) {
+        console.error(
+            '[Dashboard] Error MongoDB:',
+            error.message
+        );
     }
 
-    res.json(responseData);
+
+    return res.json(responseData);
 });
 
+
 // =====================================================================
-// 3. MÓDULO IDENTIDAD, ROLES, PERMISOS Y USUARIOS (SQL Server)
+// 3. IDENTIDAD, ROLES, PERMISOS Y USUARIOS
 // =====================================================================
 
-// 3.1 Obtener todos los usuarios con detalle de rol
+
+// =====================================================================
+// 3.1 OBTENER USUARIOS
+// GET /api/users
+// =====================================================================
+
 app.get('/api/users', async (req, res) => {
     try {
         const pool = await sqlServerPool;
-        if (!pool) throw new Error('SQL Server no disponible');
-        const result = await pool.request().query(`
-            SELECT
-                u.cedula,
-                u.nombre_rol,
-                r.descripcion AS descripcion_rol,
-                u.nombre,
-                u.apellido,
-                u.correo,
-                u.estado
-            FROM usuario u
-            LEFT JOIN rol r ON u.nombre_rol = r.nombre_rol
-            ORDER BY u.nombre, u.apellido
-        `);
 
-        res.json(result.recordset.map((user) => ({
-            ...user,
-            name: `${user.nombre} ${user.apellido}`,
-            email: user.correo,
-            role: user.nombre_rol,
-        })));
+        if (!pool) {
+            throw new Error(
+                'SQL Server no disponible'
+            );
+        }
+
+        const result =
+            await pool.request().query(`
+                SELECT
+                    u.cedula,
+                    u.nombre_rol,
+                    r.descripcion
+                        AS descripcion_rol,
+                    u.nombre,
+                    u.apellido,
+                    u.correo,
+                    u.estado
+                FROM usuario u
+                LEFT JOIN rol r
+                    ON u.nombre_rol =
+                       r.nombre_rol
+                ORDER BY
+                    u.nombre,
+                    u.apellido
+            `);
+
+        const users =
+            result.recordset.map(
+                (user) => ({
+                    ...user,
+
+                    name:
+                        `${user.nombre} ${user.apellido}`,
+
+                    email:
+                        user.correo,
+
+                    role:
+                        user.nombre_rol,
+                })
+            );
+
+        return res.json(users);
+
     } catch (error) {
-        console.error('[Identity/SQL Server] Error al obtener usuarios:', error.message);
-        res.status(500).json({ message: 'Error al obtener los usuarios' });
+        console.error(
+            '[Identity/SQL Server] Error al obtener usuarios:',
+            error.message
+        );
+
+        return res.status(500).json({
+            message:
+                'Error al obtener los usuarios.',
+        });
     }
 });
 
-// 3.2 Obtener catálogo de roles y sus módulos permitidos (rol + permiso_rol + modulo_sistema)
+
+// =====================================================================
+// 3.2 OBTENER ROLES Y PERMISOS
+// GET /api/roles
+// =====================================================================
+
 app.get('/api/roles', async (req, res) => {
     try {
         const pool = await sqlServerPool;
-        if (!pool) throw new Error('SQL Server no disponible');
 
-        const rolesResult = await pool.request().query(`
-            SELECT nombre_rol, descripcion FROM rol ORDER BY nombre_rol
-        `);
+        if (!pool) {
+            throw new Error(
+                'SQL Server no disponible'
+            );
+        }
 
-        const permisosResult = await pool.request().query(`
-            SELECT 
-                pr.nombre_rol,
-                pr.nombre_modulo,
-                ms.ruta_frontend
-            FROM permiso_rol pr
-            INNER JOIN modulo_sistema ms ON pr.nombre_modulo = ms.nombre_modulo
-            ORDER BY pr.nombre_rol, pr.nombre_modulo
-        `);
+        const rolesResult =
+            await pool.request().query(`
+                SELECT
+                    nombre_rol,
+                    descripcion
+                FROM rol
+                ORDER BY nombre_rol
+            `);
+
+
+        const permisosResult =
+            await pool.request().query(`
+                SELECT
+                    pr.nombre_rol,
+                    pr.nombre_modulo,
+                    ms.ruta_frontend
+                FROM permiso_rol pr
+                INNER JOIN modulo_sistema ms
+                    ON pr.nombre_modulo =
+                       ms.nombre_modulo
+                ORDER BY
+                    pr.nombre_rol,
+                    pr.nombre_modulo
+            `);
+
 
         const permisosPorRol = {};
-        permisosResult.recordset.forEach((p) => {
-            if (!permisosPorRol[p.nombre_rol]) permisosPorRol[p.nombre_rol] = [];
-            permisosPorRol[p.nombre_rol].push({
-                nombre_modulo: p.nombre_modulo,
-                ruta_frontend: p.ruta_frontend,
-            });
-        });
 
-        const roles = rolesResult.recordset.map((r) => ({
-            ...r,
-            permisos: permisosPorRol[r.nombre_rol] || [],
-        }));
+        permisosResult.recordset.forEach(
+            (permiso) => {
+                if (
+                    !permisosPorRol[
+                    permiso.nombre_rol
+                    ]
+                ) {
+                    permisosPorRol[
+                        permiso.nombre_rol
+                    ] = [];
+                }
 
-        res.json(roles);
+                permisosPorRol[
+                    permiso.nombre_rol
+                ].push({
+                    nombre_modulo:
+                        permiso.nombre_modulo,
+
+                    ruta_frontend:
+                        permiso.ruta_frontend,
+                });
+            }
+        );
+
+
+        const roles =
+            rolesResult.recordset.map(
+                (rol) => ({
+                    ...rol,
+
+                    permisos:
+                        permisosPorRol[
+                        rol.nombre_rol
+                        ] || [],
+                })
+            );
+
+        return res.json(roles);
+
     } catch (error) {
-        console.error('[Identity/SQL Server] Error al obtener roles:', error.message);
-        res.status(500).json({ message: 'Error al obtener roles y permisos.' });
+        console.error(
+            '[Identity/SQL Server] Error al obtener roles:',
+            error.message
+        );
+
+        return res.status(500).json({
+            message:
+                'Error al obtener roles y permisos.',
+        });
     }
 });
 
-// 3.3 Obtener catálogo maestro de empresas (tabla empresa)
+
+// =====================================================================
+// 3.3 OBTENER EMPRESAS
+// GET /api/empresas
+// =====================================================================
+
 app.get('/api/empresas', async (req, res) => {
     try {
         const pool = await sqlServerPool;
-        if (!pool) throw new Error('SQL Server no disponible');
 
-        const result = await pool.request().query(`
-            SELECT nit, nombre, correo, telefono, direccion FROM empresa ORDER BY nombre
-        `);
-        res.json(result.recordset);
+        if (!pool) {
+            throw new Error(
+                'SQL Server no disponible'
+            );
+        }
+
+        const result =
+            await pool.request().query(`
+                SELECT
+                    nit,
+                    nombre,
+                    correo,
+                    telefono,
+                    direccion
+                FROM empresa
+                ORDER BY nombre
+            `);
+
+        return res.json(
+            result.recordset
+        );
+
     } catch (error) {
-        console.error('[Identity/SQL Server] Error al obtener empresas:', error.message);
-        res.status(500).json({ message: 'Error al obtener empresas.' });
+        console.error(
+            '[Identity/SQL Server] Error al obtener empresas:',
+            error.message
+        );
+
+        return res.status(500).json({
+            message:
+                'Error al obtener empresas.',
+        });
     }
 });
 
-// Migración automática: cifra con bcrypt cualquier contraseña en texto plano existente en SQL Server
+
+// =====================================================================
+// MIGRACIÓN DE CONTRASEÑAS PLANAS A BCRYPT
+// =====================================================================
+
 async function hashExistingPlainPasswords() {
     try {
         const pool = await sqlServerPool;
-        if (!pool) return;
-        const usersRes = await pool.request().query('SELECT cedula, [contraseña] FROM usuario');
-        for (const row of usersRes.recordset) {
-            const rawPass = String(row.contraseña || '');
-            if (rawPass && !rawPass.startsWith('$2a$') && !rawPass.startsWith('$2b$')) {
-                const hashed = await bcrypt.hash(rawPass, 10);
+
+        if (!pool) {
+            return;
+        }
+
+        const usersResult =
+            await pool.request().query(`
+                SELECT
+                    cedula,
+                    [contraseña]
+                FROM usuario
+            `);
+
+        for (
+            const row of
+            usersResult.recordset
+        ) {
+            const rawPassword =
+                String(
+                    row.contraseña || ''
+                );
+
+            const isBcrypt =
+                rawPassword.startsWith('$2a$') ||
+                rawPassword.startsWith('$2b$');
+
+            if (
+                rawPassword &&
+                !isBcrypt
+            ) {
+                const hashedPassword =
+                    await bcrypt.hash(
+                        rawPassword,
+                        10
+                    );
+
                 await pool
                     .request()
-                    .input('cedula', sql.VarChar(20), row.cedula)
-                    .input('hash', sql.VarChar(255), hashed)
-                    .query('UPDATE usuario SET [contraseña] = @hash WHERE cedula = @cedula');
+
+                    .input(
+                        'cedula',
+                        sql.VarChar(20),
+                        row.cedula
+                    )
+
+                    .input(
+                        'hash',
+                        sql.VarChar(255),
+                        hashedPassword
+                    )
+
+                    .query(`
+                        UPDATE usuario
+                        SET [contraseña] = @hash
+                        WHERE cedula = @cedula
+                    `);
             }
         }
-    } catch (err) {
-        console.error('[Identity/SQL Server] Error al verificar hashes de contraseñas:', err.message);
+
+    } catch (error) {
+        console.error(
+            '[Identity/SQL Server] Error al verificar contraseñas:',
+            error.message
+        );
     }
 }
+
 hashExistingPlainPasswords();
 
-// 3.4 Iniciar sesión validando contraseña hasheada con bcrypt, estado = 'Activo' y cargando permisos del rol
-app.post('/api/auth/login', async (req, res) => {
-    const { correo, contraseña } = req.body;
 
-    if (!correo || !contraseña) {
-        return res.status(400).json({ message: 'Correo y contraseña son obligatorios.' });
+// =====================================================================
+// 3.4 INICIAR SESIÓN
+// POST /api/auth/login
+// =====================================================================
+
+app.post('/api/auth/login', async (req, res) => {
+    const {
+        correo,
+        contraseña,
+    } = req.body;
+
+    if (
+        !correo ||
+        !contraseña
+    ) {
+        return res.status(400).json({
+            message:
+                'Correo y contraseña son obligatorios.',
+        });
     }
+
 
     try {
         const pool = await sqlServerPool;
-        if (!pool) throw new Error('SQL Server no disponible');
 
-        const result = await pool.request()
-            .input('correo', sql.VarChar(100), correo)
+        if (!pool) {
+            throw new Error(
+                'SQL Server no disponible'
+            );
+        }
+
+
+        const result = await pool
+            .request()
+
+            .input(
+                'correo',
+                sql.VarChar(100),
+                correo
+            )
+
             .query(`
-                SELECT cedula, nombre_rol, nombre, apellido, correo, [contraseña], estado
+                SELECT
+                    cedula,
+                    nombre_rol,
+                    nombre,
+                    apellido,
+                    correo,
+                    [contraseña],
+                    estado
                 FROM usuario
-                WHERE correo = @correo AND estado = 'Activo'
+                WHERE correo = @correo
+                  AND estado = 'Activo'
             `);
+
 
         let passwordValid = false;
         let dbUser = null;
 
-        if (result.recordset.length > 0) {
-            dbUser = result.recordset[0];
-            const storedPass = String(dbUser.contraseña || '');
-            const isBcryptHash = storedPass.startsWith('$2a$') || storedPass.startsWith('$2b$');
+
+        if (
+            result.recordset.length > 0
+        ) {
+            dbUser =
+                result.recordset[0];
+
+            const storedPassword =
+                String(
+                    dbUser.contraseña || ''
+                );
+
+            const isBcryptHash =
+                storedPassword.startsWith('$2a$') ||
+                storedPassword.startsWith('$2b$');
+
 
             if (isBcryptHash) {
-                passwordValid = await bcrypt.compare(String(contraseña), storedPass);
-            } else if (storedPass === String(contraseña)) {
+                passwordValid =
+                    await bcrypt.compare(
+                        String(contraseña),
+                        storedPassword
+                    );
+
+            } else if (
+                storedPassword ===
+                String(contraseña)
+            ) {
                 passwordValid = true;
-                // Si estaba en texto plano, la hashea inmediatamente en SQL Server
-                const newHash = await bcrypt.hash(String(contraseña), 10);
-                await pool.request()
-                    .input('cedula', sql.VarChar(20), dbUser.cedula)
-                    .input('hash', sql.VarChar(255), newHash)
-                    .query('UPDATE usuario SET [contraseña] = @hash WHERE cedula = @cedula');
+
+                const newHash =
+                    await bcrypt.hash(
+                        String(contraseña),
+                        10
+                    );
+
+                await pool
+                    .request()
+
+                    .input(
+                        'cedula',
+                        sql.VarChar(20),
+                        dbUser.cedula
+                    )
+
+                    .input(
+                        'hash',
+                        sql.VarChar(255),
+                        newHash
+                    )
+
+                    .query(`
+                        UPDATE usuario
+                        SET [contraseña] = @hash
+                        WHERE cedula = @cedula
+                    `);
             }
         }
 
-        if (!dbUser || !passwordValid) {
-            if (mongoose.connection.readyState === 1) {
+
+        if (
+            !dbUser ||
+            !passwordValid
+        ) {
+            if (
+                mongoose.connection
+                    .readyState === 1
+            ) {
                 await LoginAudit.create({
                     cedula_usuario: correo,
-                    ip_conexion: req.ip || '127.0.0.1',
-                    estado_intento: 'Fallido',
-                    tipo_evento: 'LOGIN_FAILED',
-                }).catch(() => {});
+
+                    ip_conexion:
+                        req.ip ||
+                        '127.0.0.1',
+
+                    estado_intento:
+                        'Fallido',
+
+                    tipo_evento:
+                        'LOGIN_FAILED',
+                }).catch((auditError) => {
+                    console.error(
+                        '[MongoDB] Error registrando LOGIN_FAILED:',
+                        auditError.message
+                    );
+                });
             }
-            return res.status(401).json({ message: 'Credenciales inválidas o usuario inactivo.' });
+
+            return res.status(401).json({
+                message:
+                    'Credenciales inválidas o usuario inactivo.',
+            });
         }
+
 
         const loggedUser = {
-            cedula: dbUser.cedula,
-            nombre_rol: dbUser.nombre_rol,
-            nombre: dbUser.nombre,
-            apellido: dbUser.apellido,
-            correo: dbUser.correo,
-            estado: dbUser.estado,
+            cedula:
+                dbUser.cedula,
+
+            nombre_rol:
+                dbUser.nombre_rol,
+
+            nombre:
+                dbUser.nombre,
+
+            apellido:
+                dbUser.apellido,
+
+            correo:
+                dbUser.correo,
+
+            estado:
+                dbUser.estado,
         };
 
-        // Consultar permisos del rol del usuario
-        const permisosResult = await pool.request()
-            .input('nombre_rol', sql.VarChar(50), loggedUser.nombre_rol)
-            .query(`
-                SELECT pr.nombre_modulo, ms.ruta_frontend
-                FROM permiso_rol pr
-                INNER JOIN modulo_sistema ms ON pr.nombre_modulo = ms.nombre_modulo
-                WHERE pr.nombre_rol = @nombre_rol
-            `);
 
-        const token = generarToken(loggedUser);
+        const permisosResult =
+            await pool
+                .request()
 
-        if (mongoose.connection.readyState === 1) {
+                .input(
+                    'nombre_rol',
+                    sql.VarChar(50),
+                    loggedUser.nombre_rol
+                )
+
+                .query(`
+                    SELECT
+                        pr.nombre_modulo,
+                        ms.ruta_frontend
+                    FROM permiso_rol pr
+                    INNER JOIN modulo_sistema ms
+                        ON pr.nombre_modulo =
+                           ms.nombre_modulo
+                    WHERE pr.nombre_rol =
+                          @nombre_rol
+                `);
+
+
+        const token =
+            generarToken(loggedUser);
+
+
+        if (
+            mongoose.connection.readyState === 1
+        ) {
             await LoginAudit.create({
-                cedula_usuario: loggedUser.cedula,
-                ip_conexion: req.ip || '127.0.0.1',
-                estado_intento: 'Exitoso',
-                tipo_evento: 'LOGIN_SUCCESS',
-            }).catch(() => {});
+                cedula_usuario:
+                    loggedUser.cedula,
+
+                ip_conexion:
+                    req.ip ||
+                    '127.0.0.1',
+
+                estado_intento:
+                    'Exitoso',
+
+                tipo_evento:
+                    'LOGIN_SUCCESS',
+            }).catch((auditError) => {
+                console.error(
+                    '[MongoDB] Error registrando LOGIN_SUCCESS:',
+                    auditError.message
+                );
+            });
         }
 
-        res.json({
+
+        return res.json({
             ...loggedUser,
             token,
-            permisos: permisosResult.recordset,
+            permisos:
+                permisosResult.recordset,
         });
+
     } catch (error) {
-        console.error('[Identity/SQL Server] Login fallido:', error.message);
-        res.status(500).json({ message: 'No se pudo iniciar sesión.' });
+        console.error(
+            '[Identity/SQL Server] Login fallido:',
+            error.message
+        );
+
+        return res.status(500).json({
+            message:
+                'No se pudo iniciar sesión.',
+        });
     }
 });
 
-// 3.5 Registrar / Crear nuevo usuario (con contraseña hasheada mediante bcrypt)
-app.post('/api/auth/register', async (req, res) => {
-    const { cedula, nombre_rol = 'Usuario', nombre, apellido, correo, contraseña, estado = 'Activo' } = req.body;
 
-    if (!cedula || !nombre_rol || !nombre || !apellido || !correo || !contraseña) {
-        return res.status(400).json({ message: 'Completa todos los campos obligatorios.' });
+// =====================================================================
+// 3.5 REGISTRAR USUARIO
+// POST /api/auth/register
+// =====================================================================
+
+app.post('/api/auth/register', async (req, res) => {
+    const {
+        cedula,
+        nombre_rol = 'Usuario',
+        nombre,
+        apellido,
+        correo,
+        contraseña,
+        estado = 'Activo',
+    } = req.body;
+
+
+    if (
+        !cedula ||
+        !nombre_rol ||
+        !nombre ||
+        !apellido ||
+        !correo ||
+        !contraseña
+    ) {
+        return res.status(400).json({
+            message:
+                'Completa todos los campos obligatorios.',
+        });
     }
+
 
     try {
         const pool = await sqlServerPool;
-        if (!pool) throw new Error('SQL Server no disponible');
 
-        const hashedPassword = await bcrypt.hash(String(contraseña), 10);
+        if (!pool) {
+            throw new Error(
+                'SQL Server no disponible'
+            );
+        }
 
-        await pool.request()
-            .input('cedula', sql.VarChar(20), cedula)
-            .input('nombre_rol', sql.VarChar(50), nombre_rol)
-            .input('nombre', sql.VarChar(50), nombre)
-            .input('apellido', sql.VarChar(50), apellido)
-            .input('correo', sql.VarChar(100), correo)
-            .input('contraseña', sql.VarChar(255), hashedPassword)
-            .input('estado', sql.VarChar(20), estado)
+
+        const hashedPassword =
+            await bcrypt.hash(
+                String(contraseña),
+                10
+            );
+
+
+        await pool
+            .request()
+
+            .input(
+                'cedula',
+                sql.VarChar(20),
+                cedula
+            )
+
+            .input(
+                'nombre_rol',
+                sql.VarChar(50),
+                nombre_rol
+            )
+
+            .input(
+                'nombre',
+                sql.VarChar(50),
+                nombre
+            )
+
+            .input(
+                'apellido',
+                sql.VarChar(50),
+                apellido
+            )
+
+            .input(
+                'correo',
+                sql.VarChar(100),
+                correo
+            )
+
+            .input(
+                'contraseña',
+                sql.VarChar(255),
+                hashedPassword
+            )
+
+            .input(
+                'estado',
+                sql.VarChar(20),
+                estado
+            )
+
             .query(`
-                INSERT INTO usuario (cedula, nombre_rol, nombre, apellido, correo, [contraseña], estado)
-                VALUES (@cedula, @nombre_rol, @nombre, @apellido, @correo, @contraseña, @estado)
+                INSERT INTO usuario (
+                    cedula,
+                    nombre_rol,
+                    nombre,
+                    apellido,
+                    correo,
+                    [contraseña],
+                    estado
+                )
+                VALUES (
+                    @cedula,
+                    @nombre_rol,
+                    @nombre,
+                    @apellido,
+                    @correo,
+                    @contraseña,
+                    @estado
+                )
             `);
 
-        // Acreditar automáticamente el Bono de Bienvenida de $20.000 COP en PostgreSQL para poder apostar de inmediato
-        const bonoInicial = nombre_rol === 'Administrador' ? 0 : 20000;
+
+        /*
+         * Se crea la billetera en PostgreSQL.
+         * Los administradores no reciben bono.
+         */
+        const bonoInicial =
+            nombre_rol === 'Administrador'
+                ? 0
+                : 20000;
+
+
         try {
             await pgPool.query(
                 `
-                INSERT INTO billetera (cedula_usuario, saldo_disponible)
+                INSERT INTO billetera (
+                    cedula_usuario,
+                    saldo_disponible
+                )
                 VALUES ($1, $2)
-                ON CONFLICT (cedula_usuario) DO NOTHING
+                ON CONFLICT (
+                    cedula_usuario
+                ) DO NOTHING
                 `,
-                [cedula, bonoInicial]
+                [
+                    cedula,
+                    bonoInicial,
+                ]
             );
 
+
             if (bonoInicial > 0) {
+                await pgPool.query(`
+                    INSERT INTO tipo_transaccion (
+                        nombre_tipo,
+                        naturaleza_movimiento
+                    )
+                    VALUES (
+                        'Bono Bienvenida',
+                        'Ingreso'
+                    )
+                    ON CONFLICT (
+                        nombre_tipo
+                    ) DO NOTHING
+                `);
+
+
                 await pgPool.query(
                     `
-                    INSERT INTO tipo_transaccion (nombre_tipo, naturaleza_movimiento)
-                    VALUES ('Bono Bienvenida', 'Ingreso')
-                    ON CONFLICT (nombre_tipo) DO NOTHING
-                    `
-                );
-                await pgPool.query(
-                    `
-                    INSERT INTO historial_billetera (cedula_usuario, nombre_tipo, monto, referencia_externa)
-                    VALUES ($1, 'Bono Bienvenida', $2, $3)
+                    INSERT INTO historial_billetera (
+                        cedula_usuario,
+                        nombre_tipo,
+                        monto,
+                        referencia_externa
+                    )
+                    VALUES (
+                        $1,
+                        'Bono Bienvenida',
+                        $2,
+                        $3
+                    )
+                    ON CONFLICT (
+                        referencia_externa
+                    )
+                    WHERE referencia_externa
+                          IS NOT NULL
+                    DO NOTHING
                     `,
-                    [cedula, bonoInicial, `BIENVENIDA-${cedula}`]
+                    [
+                        cedula,
+                        bonoInicial,
+                        `BIENVENIDA-${cedula}`,
+                    ]
                 );
             }
-        } catch (pgErr) {
-            console.error('[PostgreSQL] Aviso al crear billetera con bono de bienvenida:', pgErr.message);
+
+        } catch (pgError) {
+            console.error(
+                '[PostgreSQL] No se pudo crear la billetera:',
+                pgError.message
+            );
         }
 
-        res.status(201).json({
-            message: 'Usuario registrado correctamente con Bono de Bienvenida de $20.000 COP.',
-            bono_bienvenida: bonoInicial,
+
+        return res.status(201).json({
+            message:
+                nombre_rol === 'Administrador'
+                    ? 'Administrador registrado correctamente.'
+                    : 'Usuario registrado con Bono de Bienvenida de $20.000 COP.',
+
+            bono_bienvenida:
+                bonoInicial,
         });
+
     } catch (error) {
-        console.error('[Identity/SQL Server] Registro fallido:', error.message);
-        if (error.number === 2627 || error.number === 2601) {
-            return res.status(409).json({ message: 'La cédula o el correo ya están registrados.' });
+        console.error(
+            '[Identity/SQL Server] Registro fallido:',
+            error.message
+        );
+
+
+        if (
+            error.number === 2627 ||
+            error.number === 2601
+        ) {
+            return res.status(409).json({
+                message:
+                    'La cédula o el correo ya están registrados.',
+            });
         }
+
+
         if (error.number === 547) {
-            return res.status(400).json({ message: `El rol "${nombre_rol}" no existe en la tabla rol.` });
+            return res.status(400).json({
+                message:
+                    `El rol "${nombre_rol}" no existe.`,
+            });
         }
-        res.status(500).json({ message: 'No se pudo registrar el usuario.' });
+
+
+        return res.status(500).json({
+            message:
+                'No se pudo registrar el usuario.',
+        });
     }
 });
 
-// 3.6 Actualizar usuario existente (Nombre, Apellido, Correo, Rol, Estado y Contraseña opcional hasheada)
+
+// =====================================================================
+// 3.6 ACTUALIZAR USUARIO
+// PUT /api/users/:cedula
+// =====================================================================
+
 app.put('/api/users/:cedula', async (req, res) => {
     const { cedula } = req.params;
-    const { nombre, apellido, correo, nombre_rol, estado, contraseña } = req.body;
 
-    if (!nombre || !apellido || !correo || !nombre_rol || !estado) {
-        return res.status(400).json({ message: 'Nombre, apellido, correo, rol y estado son obligatorios.' });
+    const {
+        nombre,
+        apellido,
+        correo,
+        nombre_rol,
+        estado,
+        contraseña,
+    } = req.body;
+
+
+    if (
+        !nombre ||
+        !apellido ||
+        !correo ||
+        !nombre_rol ||
+        !estado
+    ) {
+        return res.status(400).json({
+            message:
+                'Nombre, apellido, correo, rol y estado son obligatorios.',
+        });
     }
+
 
     try {
         const pool = await sqlServerPool;
-        if (!pool) throw new Error('SQL Server no disponible');
 
-        const request = pool.request()
-            .input('cedula', sql.VarChar(20), cedula)
-            .input('nombre', sql.VarChar(50), nombre)
-            .input('apellido', sql.VarChar(50), apellido)
-            .input('correo', sql.VarChar(100), correo)
-            .input('nombre_rol', sql.VarChar(50), nombre_rol)
-            .input('estado', sql.VarChar(20), estado);
+        if (!pool) {
+            throw new Error(
+                'SQL Server no disponible'
+            );
+        }
+
+
+        const request = pool
+            .request()
+
+            .input(
+                'cedula',
+                sql.VarChar(20),
+                cedula
+            )
+
+            .input(
+                'nombre',
+                sql.VarChar(50),
+                nombre
+            )
+
+            .input(
+                'apellido',
+                sql.VarChar(50),
+                apellido
+            )
+
+            .input(
+                'correo',
+                sql.VarChar(100),
+                correo
+            )
+
+            .input(
+                'nombre_rol',
+                sql.VarChar(50),
+                nombre_rol
+            )
+
+            .input(
+                'estado',
+                sql.VarChar(20),
+                estado
+            );
+
 
         let query = `
             UPDATE usuario
-            SET nombre = @nombre,
+            SET
+                nombre = @nombre,
                 apellido = @apellido,
                 correo = @correo,
                 nombre_rol = @nombre_rol,
                 estado = @estado
         `;
 
-        if (contraseña && contraseña.trim() !== '') {
-            const hashedPassword = await bcrypt.hash(String(contraseña), 10);
-            request.input('contraseña', sql.VarChar(255), hashedPassword);
-            query += `, [contraseña] = @contraseña`;
+
+        if (
+            contraseña &&
+            contraseña.trim() !== ''
+        ) {
+            const hashedPassword =
+                await bcrypt.hash(
+                    String(contraseña),
+                    10
+                );
+
+            request.input(
+                'contraseña',
+                sql.VarChar(255),
+                hashedPassword
+            );
+
+            query +=
+                ', [contraseña] = @contraseña';
         }
 
-        query += ` WHERE cedula = @cedula`;
 
-        const result = await request.query(query);
-        if (result.rowsAffected[0] === 0) {
-            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        query +=
+            ' WHERE cedula = @cedula';
+
+
+        const result =
+            await request.query(query);
+
+
+        if (
+            result.rowsAffected[0] === 0
+        ) {
+            return res.status(404).json({
+                message:
+                    'Usuario no encontrado.',
+            });
         }
 
-        res.json({ message: 'Usuario actualizado correctamente.' });
+
+        return res.json({
+            message:
+                'Usuario actualizado correctamente.',
+        });
+
     } catch (error) {
-        console.error('[Identity/SQL Server] Error al actualizar usuario:', error.message);
-        if (error.number === 2627 || error.number === 2601) {
-            return res.status(409).json({ message: 'El correo electrónico ya está en uso por otro usuario.' });
+        console.error(
+            '[Identity/SQL Server] Error al actualizar usuario:',
+            error.message
+        );
+
+
+        if (
+            error.number === 2627 ||
+            error.number === 2601
+        ) {
+            return res.status(409).json({
+                message:
+                    'El correo ya está en uso por otro usuario.',
+            });
         }
-        res.status(500).json({ message: 'No se pudo actualizar el usuario.' });
+
+
+        return res.status(500).json({
+            message:
+                'No se pudo actualizar el usuario.',
+        });
     }
 });
 
-// 3.7 Eliminar usuario por cédula
+
+// =====================================================================
+// 3.7 ELIMINAR USUARIO
+// DELETE /api/users/:cedula
+// =====================================================================
+
 app.delete('/api/users/:cedula', async (req, res) => {
     const { cedula } = req.params;
 
     try {
         const pool = await sqlServerPool;
-        if (!pool) throw new Error('SQL Server no disponible');
 
-        const result = await pool.request()
-            .input('cedula', sql.VarChar(20), cedula)
-            .query('DELETE FROM usuario WHERE cedula = @cedula');
-
-        if (result.rowsAffected[0] === 0) {
-            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        if (!pool) {
+            throw new Error(
+                'SQL Server no disponible'
+            );
         }
 
-        res.json({ message: 'Usuario eliminado correctamente.' });
+
+        const result = await pool
+            .request()
+
+            .input(
+                'cedula',
+                sql.VarChar(20),
+                cedula
+            )
+
+            .query(`
+                DELETE FROM usuario
+                WHERE cedula = @cedula
+            `);
+
+
+        if (
+            result.rowsAffected[0] === 0
+        ) {
+            return res.status(404).json({
+                message:
+                    'Usuario no encontrado.',
+            });
+        }
+
+
+        return res.json({
+            message:
+                'Usuario eliminado correctamente.',
+        });
+
     } catch (error) {
-        console.error('[Identity/SQL Server] Error al eliminar usuario:', error.message);
-        res.status(500).json({ message: 'No se pudo eliminar el usuario.' });
+        console.error(
+            '[Identity/SQL Server] Error al eliminar usuario:',
+            error.message
+        );
+
+        return res.status(500).json({
+            message:
+                'No se pudo eliminar el usuario.',
+        });
     }
 });
 
-const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-    console.log(`\n======================================================`);
-    console.log(`ApuestaX Backend en ejecución: http://localhost:${PORT}`);
-    console.log(`   - Identidad (Auth): SQL Server`);
-    console.log(`   - Deportes y Partidos: MySQL (/api/sports)`);
-    console.log(`   - Billetera y Apuestas: PostgreSQL (/api/betting)`);
-    console.log(`   - Reglas y Logs: MongoDB (/api/rules)`);
-    console.log(`   - Diagnóstico: http://localhost:${PORT}/api/health`);
-    console.log(`======================================================\n`);
+// =====================================================================
+// 4. RUTA NO ENCONTRADA
+// =====================================================================
+
+app.use((req, res) => {
+    return res.status(404).json({
+        message: 'Ruta no encontrada.',
+        method: req.method,
+        path: req.originalUrl,
+    });
+});
+
+
+// =====================================================================
+// 5. MANEJADOR GLOBAL DE ERRORES
+// =====================================================================
+
+app.use((error, req, res, next) => {
+    console.error(
+        '[Express] Error no controlado:',
+        error.message
+    );
+
+    if (
+        error.message?.startsWith(
+            'Origen no permitido por CORS'
+        )
+    ) {
+        return res.status(403).json({
+            message:
+                'El origen de la solicitud no está autorizado.',
+        });
+    }
+
+    return res.status(500).json({
+        message:
+            'Ocurrió un error interno en el servidor.',
+    });
+});
+
+
+// =====================================================================
+// 6. INICIAR SERVIDOR
+// =====================================================================
+
+const PORT =
+    Number(process.env.PORT || 5000);
+
+const HOST = '0.0.0.0';
+
+
+app.listen(PORT, HOST, () => {
+    const environment =
+        process.env.NODE_ENV ||
+        'development';
+
+    console.log(
+        '\n======================================================'
+    );
+
+    console.log(
+        'ApuestaX Backend en ejecución'
+    );
+
+    console.log(
+        `Entorno: ${environment}`
+    );
+
+    console.log(
+        `Host: ${HOST}`
+    );
+
+    console.log(
+        `Puerto: ${PORT}`
+    );
+
+    console.log(
+        'Identidad: SQL Server'
+    );
+
+    console.log(
+        'Deportes y partidos: MySQL (/api/sports)'
+    );
+
+    console.log(
+        'Billetera y apuestas: PostgreSQL (/api/betting)'
+    );
+
+    console.log(
+        'Reglas y auditoría: MongoDB (/api/rules)'
+    );
+
+    console.log(
+        'Pagos: Wompi + Firebase (/api/payments)'
+    );
+
+    console.log(
+        'Diagnóstico: /api/health'
+    );
+
+    console.log(
+        '======================================================\n'
+    );
 });

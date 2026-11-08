@@ -34,7 +34,7 @@ const FALLBACK_MATCHES = [
     estado_partido: 'En Vivo',
     arbitro: 'Bismarks Santiago',
     dt_local: 'Hernán Darío Herrera',
-    dt_visitante: 'Javier Gandolfi',
+    dt_visitante: 'Lucas González',
   },
   {
     codigo_partido: 'MIL-AME-F2',
@@ -51,8 +51,8 @@ const FALLBACK_MATCHES = [
     marcador_visitante: 1,
     estado_partido: 'En Vivo',
     arbitro: 'Nicolás Gallo',
-    dt_local: 'David González',
-    dt_visitante: 'Jorge da Silva',
+    dt_local: 'Alberto Gamero',
+    dt_visitante: 'David González',
   },
   {
     codigo_partido: 'MED-CAL-F2',
@@ -69,8 +69,8 @@ const FALLBACK_MATCHES = [
     marcador_visitante: 2,
     estado_partido: 'En Vivo',
     arbitro: 'Wilmar Roldán',
-    dt_local: 'Alejandro Restrepo',
-    dt_visitante: 'Alfredo Arias',
+    dt_local: 'Luis Amaranto Perea',
+    dt_visitante: 'Rafael Dudamel',
   },
   {
     codigo_partido: 'SFE-TOL-F2',
@@ -87,8 +87,8 @@ const FALLBACK_MATCHES = [
     marcador_visitante: 0,
     estado_partido: 'En Vivo',
     arbitro: 'Carlos Betancur',
-    dt_local: 'Pablo Peirano',
-    dt_visitante: 'Ismael Rescalvo',
+    dt_local: 'Pablo Repetto',
+    dt_visitante: 'Luis Fernando Suárez',
   },
   {
     codigo_partido: 'JUN-ONC-F3',
@@ -105,7 +105,7 @@ const FALLBACK_MATCHES = [
     marcador_visitante: 0,
     estado_partido: 'Programado',
     arbitro: 'Jhon Hinestroza',
-    dt_local: 'César Farías',
+    dt_local: 'Sebastián Viera',
     dt_visitante: 'Hernán Darío Herrera',
   },
   {
@@ -123,8 +123,8 @@ const FALLBACK_MATCHES = [
     marcador_visitante: 0,
     estado_partido: 'Programado',
     arbitro: 'Bismarks Santiago',
-    dt_local: 'Gustavo Florentín',
-    dt_visitante: 'Luis Fernando Suárez',
+    dt_local: 'Pablo Peirano',
+    dt_visitante: 'Alexis Márquez',
   },
   {
     codigo_partido: 'CUC-SFE-F3',
@@ -141,8 +141,8 @@ const FALLBACK_MATCHES = [
     marcador_visitante: 0,
     estado_partido: 'Programado',
     arbitro: 'Nicolás Gallo',
-    dt_local: 'Bernardo Redín',
-    dt_visitante: 'Pablo Peirano',
+    dt_local: 'Nicolás Chiesa',
+    dt_visitante: 'Pablo Repetto',
   },
   {
     codigo_partido: 'FOR-MED-F3',
@@ -159,8 +159,8 @@ const FALLBACK_MATCHES = [
     marcador_visitante: 0,
     estado_partido: 'Programado',
     arbitro: 'Wilmar Roldán',
-    dt_local: 'Sebastián Oliveros',
-    dt_visitante: 'Alejandro Restrepo',
+    dt_local: 'Diego Arias',
+    dt_visitante: 'Luis Amaranto Perea',
   },
   {
     codigo_partido: 'NAL-AGU-F4',
@@ -177,8 +177,8 @@ const FALLBACK_MATCHES = [
     marcador_visitante: 0,
     estado_partido: 'Programado',
     arbitro: 'Carlos Betancur',
-    dt_local: 'Javier Gandolfi',
-    dt_visitante: 'Pedro Depablos',
+    dt_local: 'Lucas González',
+    dt_visitante: 'Flavio Robatto',
   },
   {
     codigo_partido: 'NAL-MIL-F1',
@@ -195,8 +195,8 @@ const FALLBACK_MATCHES = [
     marcador_visitante: 1,
     estado_partido: 'Finalizado',
     arbitro: 'Wilmar Roldán',
-    dt_local: 'Javier Gandolfi',
-    dt_visitante: 'David González',
+    dt_local: 'Lucas González',
+    dt_visitante: 'Alberto Gamero',
   },
   {
     codigo_partido: 'AME-JUN-F1',
@@ -213,8 +213,8 @@ const FALLBACK_MATCHES = [
     marcador_visitante: 0,
     estado_partido: 'Finalizado',
     arbitro: 'Carlos Betancur',
-    dt_local: 'Jorge da Silva',
-    dt_visitante: 'César Farías',
+    dt_local: 'David González',
+    dt_visitante: 'Sebastián Viera',
   },
 ];
 
@@ -375,6 +375,7 @@ function MatchesPanel({ user }) {
 
   const [selectedJornada, setSelectedJornada] = useState('ALL');
   const [expandedMatch, setExpandedMatch] = useState(null);
+  const [activeMatchTab, setActiveMatchTab] = useState('goleadores');
   const [matchDetailsCache, setMatchDetailsCache] = useState({});
   const [liveAutoRefresh, setLiveAutoRefresh] = useState(true);
   const [liveMinute, setLiveMinute] = useState(64);
@@ -518,12 +519,13 @@ function MatchesPanel({ user }) {
     }
   };
 
-  const handleToggleDetails = async (codigoPartido) => {
-    if (expandedMatch === codigoPartido) {
+  const handleToggleDetails = async (codigoPartido, initialTab = 'goleadores') => {
+    if (expandedMatch === codigoPartido && !initialTab) {
       setExpandedMatch(null);
       return;
     }
     setExpandedMatch(codigoPartido);
+    if (initialTab) setActiveMatchTab(initialTab);
 
     if (!matchDetailsCache[codigoPartido]) {
       try {
@@ -717,35 +719,49 @@ function MatchesPanel({ user }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-7 items-start">
         <div className="lg:col-span-2 space-y-10">
           {/* ===================================================================== */}
-          {/* SECCIÓN 1: APUESTAS ACTIVAS (DISEÑO IDÉNTICO A TU REFERENCIA) */}
+          {/* SECCIÓN 1: APUESTAS ACTIVAS O VISTA INTERNA DEL PARTIDO (MATCH CENTER) */}
           {/* ===================================================================== */}
           <section>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-                Apuestas Activas
-              </h2>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveSlide((prev) => Math.max(0, prev - 1))}
-                  className="w-8 h-8 rounded-lg bg-[#182232] hover:bg-slate-800 border border-slate-700/60 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer"
-                  aria-label="Anterior"
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setActiveSlide((prev) =>
-                      prev + 1 < displayActiveMatches.length ? prev + 1 : 0
-                    )
-                  }
-                  className="w-8 h-8 rounded-lg bg-[#182232] hover:bg-slate-800 border border-slate-700/60 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer"
-                  aria-label="Siguiente"
-                >
-                  ›
-                </button>
+              <div className="flex items-center gap-3">
+                {expandedMatch && (
+                  <button
+                    type="button"
+                    onClick={() => setExpandedMatch(null)}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-[#39FF14] text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <span>←</span> Volver a Partidos
+                  </button>
+                )}
+                <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                  {expandedMatch ? 'Centro del Partido y Apuestas de Jugadores' : 'Apuestas Activas'}
+                </h2>
               </div>
+
+              {!expandedMatch && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSlide((prev) => Math.max(0, prev - 1))}
+                    className="w-8 h-8 rounded-lg bg-[#182232] hover:bg-slate-800 border border-slate-700/60 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer"
+                    aria-label="Anterior"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActiveSlide((prev) =>
+                        prev + 1 < displayActiveMatches.length ? prev + 1 : 0
+                      )
+                    }
+                    className="w-8 h-8 rounded-lg bg-[#182232] hover:bg-slate-800 border border-slate-700/60 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer"
+                    aria-label="Siguiente"
+                  >
+                    ›
+                  </button>
+                </div>
+              )}
             </div>
 
             {loading ? (
@@ -753,8 +769,621 @@ function MatchesPanel({ user }) {
                 <div className="w-10 h-10 border-4 border-[#39FF14] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
                 <p className="text-slate-400 text-sm">Sincronizando partidos en vivo...</p>
               </div>
+            ) : expandedMatch ? (
+              (() => {
+                const match =
+                  matches.find((m) => m.codigo_partido === expandedMatch) ||
+                  displayActiveMatches[0];
+                if (!match) return null;
+
+                const matchOdds = oddsMap[match.codigo_partido] || {
+                  'Gana Local': 1.85,
+                  Empate: 3.1,
+                  'Gana Visitante': 3.65,
+                  'Más de 2.5 Goles': 1.9,
+                  'Menos de 2.5 Goles': 1.85,
+                  'Ambos Marcan': 1.8,
+                };
+                const oddLocal = matchOdds['Gana Local'] || 1.85;
+                const oddEmpate = matchOdds['Empate'] || 3.1;
+                const oddVisitante = matchOdds['Gana Visitante'] || 3.65;
+                const oddMas25 = matchOdds['Más de 2.5 Goles'] || 1.9;
+                const oddMenos25 = matchOdds['Menos de 2.5 Goles'] || 1.85;
+                const oddAmbos =
+                  matchOdds['Ambos Marcan'] || matchOdds['Ambos Equipos Anotan'] || 1.8;
+
+                const selectedLine = betSlip.find(
+                  (item) => item.codigo_partido === match.codigo_partido
+                );
+                const localStyle = TEAM_STYLES[match.equipo_local] || { short: match.equipo_local };
+                const visStyle = TEAM_STYLES[match.equipo_visitante] || { short: match.equipo_visitante };
+                const details = matchDetailsCache[match.codigo_partido] || {
+                  alineaciones: [],
+                  eventos: [],
+                };
+
+                const matchPlayers = players.filter(
+                  (p) =>
+                    p.nombre_equipo === match.equipo_local ||
+                    p.nombre_equipo === match.equipo_visitante
+                );
+                const fullRoster =
+                  details.alineaciones?.length > 0 ? details.alineaciones : matchPlayers;
+
+                const localPlayers = fullRoster.filter(
+                  (p) => p.nombre_equipo === match.equipo_local
+                );
+                const visitorPlayers = fullRoster.filter(
+                  (p) => p.nombre_equipo === match.equipo_visitante
+                );
+
+                const getPlayerGoalOdd = (jug) => {
+                  const nombreJug = jug.nombre_jugador || jug.nombre_completo;
+                  return (
+                    matchOdds[`Gol: ${nombreJug}`] ||
+                    (jug.posicion_habitual === 'Delantero'
+                      ? 2.25
+                      : jug.posicion_habitual === 'Volante'
+                        ? 2.95
+                        : 4.5)
+                  );
+                };
+
+                const getPlayerCardOdd = (jug) => {
+                  const nombreJug = jug.nombre_jugador || jug.nombre_completo;
+                  return matchOdds[`Tarjeta: ${nombreJug}`] || 3.2;
+                };
+
+                return (
+                  <div className="space-y-5">
+                    {/* Selector rápido para cambiar de partido sin regresar */}
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                      {displayActiveMatches.map((m) => {
+                        const active = m.codigo_partido === match.codigo_partido;
+                        const lShort = TEAM_STYLES[m.equipo_local]?.short || m.equipo_local;
+                        const vShort = TEAM_STYLES[m.equipo_visitante]?.short || m.equipo_visitante;
+                        return (
+                          <button
+                            key={m.codigo_partido}
+                            type="button"
+                            onClick={() => handleToggleDetails(m.codigo_partido, activeMatchTab)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 border transition cursor-pointer ${
+                              active
+                                ? 'bg-[#39FF14]/15 border-[#39FF14] text-[#39FF14]'
+                                : 'bg-[#182232] border-slate-800 text-slate-300 hover:text-white'
+                            }`}
+                          >
+                            {lShort} vs {vShort} ({m.marcador_local}-{m.marcador_visitante})
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Contenedor Principal del Centro del Partido */}
+                    <div className="rounded-3xl bg-[#1c2636] border border-slate-700/70 shadow-2xl overflow-hidden">
+                      {/* Banner Superior tipo Estadio */}
+                      <div className="bg-gradient-to-b from-[#111827] to-[#1c2636] p-6 border-b border-slate-800">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 mb-5">
+                          <span className="font-semibold text-slate-300">
+                            🏟️ {match.nombre_estadio} ({match.ciudad || 'Colombia'}) • ⚖️ Árbitro:{' '}
+                            <strong className="text-white">{match.arbitro || 'Designado'}</strong>
+                          </span>
+                          {match.estado_partido === 'En Vivo' ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/20 text-[#39FF14] font-extrabold text-xs">
+                              <span className="w-2 h-2 rounded-full bg-[#39FF14] animate-ping" />
+                              EN VIVO {liveMinute}&apos;
+                            </span>
+                          ) : (
+                            <span className="px-3 py-1 rounded-full bg-slate-800 text-slate-300 font-bold">
+                              {match.estado_partido}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Equipos, Escudos, Marcador y Directores Técnicos con espacio amplio */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-6 text-center">
+                          <div className="flex flex-col items-center bg-[#111827]/70 border border-slate-800/90 rounded-2xl p-4">
+                            <ClubCrest teamName={match.equipo_local} />
+                            <h3 className="mt-2 text-base sm:text-lg font-extrabold text-white">
+                              {match.equipo_local}
+                            </h3>
+                            <ColombiaFlag />
+                            <div className="mt-3 pt-2.5 border-t border-slate-800 w-full">
+                              <span className="text-[11px] uppercase tracking-wider text-slate-400 block">
+                                Director Técnico
+                              </span>
+                              <span className="text-sm font-bold text-[#39FF14] block mt-0.5">
+                                👔 {match.dt_local || 'Por definir'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-center justify-center">
+                            <span className="text-xs font-extrabold uppercase tracking-widest text-slate-400">
+                              {match.nombre_jornada || 'Liga BetPlay Dimayor'}
+                            </span>
+                            <div className="my-3 px-6 py-3 rounded-2xl bg-[#0f172a] border border-slate-700 text-3xl font-black text-white font-mono tracking-wider shadow-inner">
+                              {match.marcador_local} - {match.marcador_visitante}
+                            </div>
+                            {selectedLine && (
+                              <span className="px-3 py-1 rounded-full bg-[#39FF14]/15 border border-[#39FF14]/40 text-[#39FF14] text-xs font-bold">
+                                ✓ En cupón: {selectedLine.nombre_mercado} (
+                                {selectedLine.valor_cuota_congelada.toFixed(2)})
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-col items-center bg-[#111827]/70 border border-slate-800/90 rounded-2xl p-4">
+                            <ClubCrest teamName={match.equipo_visitante} />
+                            <h3 className="mt-2 text-base sm:text-lg font-extrabold text-white">
+                              {match.equipo_visitante}
+                            </h3>
+                            <ColombiaFlag />
+                            <div className="mt-3 pt-2.5 border-t border-slate-800 w-full">
+                              <span className="text-[11px] uppercase tracking-wider text-slate-400 block">
+                                Director Técnico
+                              </span>
+                              <span className="text-sm font-bold text-[#39FF14] block mt-0.5">
+                                👔 {match.dt_visitante || 'Por definir'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Pestañas de Navegación Interna del Partido */}
+                      <div className="bg-[#111827] px-4 sm:px-6 py-3 border-b border-slate-800 flex flex-wrap gap-2">
+                        {[
+                          { id: 'goleadores', label: '⚽ Apuesta Goleador (Anota Gol)' },
+                          { id: 'tarjetas', label: '🟨 Tarjetas por Jugador' },
+                          { id: 'mercados', label: '🎯 Mercados del Partido (1X2 y Goles)' },
+                          { id: 'alineaciones', label: '📋 Plantillas e Incidencias en Vivo' },
+                        ].map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setActiveMatchTab(tab.id)}
+                            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition cursor-pointer ${
+                              activeMatchTab === tab.id
+                                ? 'bg-[#39FF14] text-slate-950 shadow-md shadow-[#39FF14]/25'
+                                : 'bg-[#1c2636] text-slate-300 hover:text-white border border-slate-700/70'
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Contenido de la Pestaña Activa */}
+                      <div className="p-5 sm:p-6">
+                        {/* PESTAÑA 1: GOLEADORES (2 COLUMNAS AMPLIAS POR EQUIPO) */}
+                        {activeMatchTab === 'goleadores' && (
+                          <div className="space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-slate-800">
+                              <div>
+                                <h4 className="text-base font-extrabold text-white">
+                                  ⚽ Jugador Anota Gol en Cualquier Momento
+                                </h4>
+                                <p className="text-xs text-slate-400">
+                                  Haz clic sobre la cuota de cualquier jugador para agregarlo directamente a tu Cupón de Apuesta.
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                              {[
+                                {
+                                  teamName: match.equipo_local,
+                                  dt: match.dt_local,
+                                  roster: localPlayers.filter((p) => p.posicion_habitual !== 'Portero'),
+                                },
+                                {
+                                  teamName: match.equipo_visitante,
+                                  dt: match.dt_visitante,
+                                  roster: visitorPlayers.filter((p) => p.posicion_habitual !== 'Portero'),
+                                },
+                              ].map((group) => (
+                                <div
+                                  key={group.teamName}
+                                  className="bg-[#111827]/90 border border-slate-800 rounded-2xl p-4 space-y-3"
+                                >
+                                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
+                                    <div>
+                                      <h5 className="text-sm font-extrabold text-white">
+                                        {group.teamName}
+                                      </h5>
+                                      <span className="text-[11px] text-slate-400">
+                                        DT: <strong className="text-slate-200">{group.dt}</strong>
+                                      </span>
+                                    </div>
+                                    <span className="text-[11px] font-bold text-[#39FF14]">
+                                      Cuota Gol
+                                    </span>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    {group.roster.map((jug) => {
+                                      const nombreJug = jug.nombre_jugador || jug.nombre_completo;
+                                      const mktGol = `Gol: ${nombreJug}`;
+                                      const cuotaGol = getPlayerGoalOdd(jug);
+                                      const isSelected = selectedLine?.nombre_mercado === mktGol;
+
+                                      return (
+                                        <button
+                                          key={jug.documento_jugador || nombreJug}
+                                          type="button"
+                                          onClick={() => handleSelectOdd(match, mktGol, cuotaGol)}
+                                          className={`w-full rounded-xl p-3 flex items-center justify-between gap-3 text-left transition-all cursor-pointer border ${
+                                            isSelected
+                                              ? 'bg-[#39FF14] text-slate-950 border-[#39FF14] shadow-lg shadow-[#39FF14]/25'
+                                              : 'bg-[#1c2636] hover:bg-slate-800/90 text-white border-slate-700/70 hover:border-[#39FF14]/60'
+                                          }`}
+                                        >
+                                          <div>
+                                            <span
+                                              className={`text-sm font-extrabold block ${
+                                                isSelected ? 'text-slate-950' : 'text-white'
+                                              }`}
+                                            >
+                                              {nombreJug}
+                                            </span>
+                                            <span
+                                              className={`text-xs block mt-0.5 ${
+                                                isSelected ? 'text-slate-900 font-semibold' : 'text-slate-400'
+                                              }`}
+                                            >
+                                              {jug.posicion_habitual}
+                                            </span>
+                                          </div>
+
+                                          <span
+                                            className={`px-3 py-1.5 rounded-lg font-mono text-sm font-black shrink-0 ${
+                                              isSelected
+                                                ? 'bg-slate-950 text-[#39FF14]'
+                                                : 'bg-[#111827] text-[#39FF14] border border-slate-700'
+                                            }`}
+                                          >
+                                            ⚽ {Number(cuotaGol).toFixed(2)}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* PESTAÑA 2: TARJETAS POR JUGADOR */}
+                        {activeMatchTab === 'tarjetas' && (
+                          <div className="space-y-4">
+                            <div className="pb-2 border-b border-slate-800">
+                              <h4 className="text-base font-extrabold text-white">
+                                🟨 Jugador Recibe Tarjeta en el Partido
+                              </h4>
+                              <p className="text-xs text-slate-400">
+                                Selecciona qué jugador recibirá amonestación durante el encuentro.
+                              </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                              {[
+                                {
+                                  teamName: match.equipo_local,
+                                  dt: match.dt_local,
+                                  roster: localPlayers,
+                                },
+                                {
+                                  teamName: match.equipo_visitante,
+                                  dt: match.dt_visitante,
+                                  roster: visitorPlayers,
+                                },
+                              ].map((group) => (
+                                <div
+                                  key={group.teamName}
+                                  className="bg-[#111827]/90 border border-slate-800 rounded-2xl p-4 space-y-3"
+                                >
+                                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
+                                    <div>
+                                      <h5 className="text-sm font-extrabold text-white">
+                                        {group.teamName}
+                                      </h5>
+                                      <span className="text-[11px] text-slate-400">
+                                        DT: <strong className="text-slate-200">{group.dt}</strong>
+                                      </span>
+                                    </div>
+                                    <span className="text-[11px] font-bold text-amber-400">
+                                      Cuota Tarjeta
+                                    </span>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    {group.roster.map((jug) => {
+                                      const nombreJug = jug.nombre_jugador || jug.nombre_completo;
+                                      const mktTarjeta = `Tarjeta: ${nombreJug}`;
+                                      const cuotaTarjeta = getPlayerCardOdd(jug);
+                                      const isSelected = selectedLine?.nombre_mercado === mktTarjeta;
+
+                                      return (
+                                        <button
+                                          key={jug.documento_jugador || nombreJug}
+                                          type="button"
+                                          onClick={() =>
+                                            handleSelectOdd(match, mktTarjeta, cuotaTarjeta)
+                                          }
+                                          className={`w-full rounded-xl p-3 flex items-center justify-between gap-3 text-left transition-all cursor-pointer border ${
+                                            isSelected
+                                              ? 'bg-[#39FF14] text-slate-950 border-[#39FF14] shadow-lg shadow-[#39FF14]/25'
+                                              : 'bg-[#1c2636] hover:bg-slate-800/90 text-white border-slate-700/70 hover:border-amber-400/60'
+                                          }`}
+                                        >
+                                          <div>
+                                            <span
+                                              className={`text-sm font-extrabold block ${
+                                                isSelected ? 'text-slate-950' : 'text-white'
+                                              }`}
+                                            >
+                                              {nombreJug}
+                                            </span>
+                                            <span
+                                              className={`text-xs block mt-0.5 ${
+                                                isSelected ? 'text-slate-900 font-semibold' : 'text-slate-400'
+                                              }`}
+                                            >
+                                              {jug.posicion_habitual}
+                                            </span>
+                                          </div>
+
+                                          <span
+                                            className={`px-3 py-1.5 rounded-lg font-mono text-sm font-black shrink-0 ${
+                                              isSelected
+                                                ? 'bg-slate-950 text-[#39FF14]'
+                                                : 'bg-[#111827] text-amber-300 border border-slate-700'
+                                            }`}
+                                          >
+                                            🟨 {Number(cuotaTarjeta).toFixed(2)}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* PESTAÑA 3: MERCADOS PRINCIPALES DEL PARTIDO (1X2 Y GOLES) */}
+                        {activeMatchTab === 'mercados' && (
+                          <div className="space-y-6">
+                            <div>
+                              <h4 className="text-sm font-extrabold uppercase tracking-wider text-slate-300 mb-3">
+                                Resultado Final (1X2)
+                              </h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                {[
+                                  {
+                                    label: `Gana ${match.equipo_local}`,
+                                    market: 'Gana Local',
+                                    value: oddLocal,
+                                  },
+                                  { label: 'Empate', market: 'Empate', value: oddEmpate },
+                                  {
+                                    label: `Gana ${match.equipo_visitante}`,
+                                    market: 'Gana Visitante',
+                                    value: oddVisitante,
+                                  },
+                                ].map((oddBox) => {
+                                  const isSelected = selectedLine?.nombre_mercado === oddBox.market;
+                                  return (
+                                    <button
+                                      key={oddBox.market}
+                                      type="button"
+                                      onClick={() =>
+                                        handleSelectOdd(match, oddBox.market, oddBox.value)
+                                      }
+                                      className={`rounded-2xl p-4 flex items-center justify-between transition-all cursor-pointer border ${
+                                        isSelected
+                                          ? 'bg-[#39FF14] text-slate-950 border-[#39FF14] shadow-lg shadow-[#39FF14]/25'
+                                          : 'bg-[#111827] hover:bg-slate-900 text-white border-slate-800 hover:border-[#39FF14]/50'
+                                      }`}
+                                    >
+                                      <span className="text-sm font-bold">{oddBox.label}</span>
+                                      <span
+                                        className={`text-base font-black font-mono ${
+                                          isSelected ? 'text-slate-950' : 'text-[#39FF14]'
+                                        }`}
+                                      >
+                                        {Number(oddBox.value).toFixed(2)}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div>
+                              <h4 className="text-sm font-extrabold uppercase tracking-wider text-slate-300 mb-3">
+                                Mercados de Goles y Ambos Anotan
+                              </h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                {[
+                                  {
+                                    label: 'Más de 2.5 Goles',
+                                    market: 'Más de 2.5 Goles',
+                                    value: oddMas25,
+                                  },
+                                  {
+                                    label: 'Menos de 2.5 Goles',
+                                    market: 'Menos de 2.5 Goles',
+                                    value: oddMenos25,
+                                  },
+                                  { label: 'Ambos Equipos Marcan', market: 'Ambos Marcan', value: oddAmbos },
+                                ].map((oddBox) => {
+                                  const isSelected = selectedLine?.nombre_mercado === oddBox.market;
+                                  return (
+                                    <button
+                                      key={oddBox.market}
+                                      type="button"
+                                      onClick={() =>
+                                        handleSelectOdd(match, oddBox.market, oddBox.value)
+                                      }
+                                      className={`rounded-2xl p-4 flex items-center justify-between transition-all cursor-pointer border ${
+                                        isSelected
+                                          ? 'bg-[#39FF14] text-slate-950 border-[#39FF14] shadow-lg shadow-[#39FF14]/25'
+                                          : 'bg-[#111827] hover:bg-slate-900 text-white border-slate-800 hover:border-[#39FF14]/50'
+                                      }`}
+                                    >
+                                      <span className="text-sm font-bold">{oddBox.label}</span>
+                                      <span
+                                        className={`text-base font-black font-mono ${
+                                          isSelected ? 'text-slate-950' : 'text-[#39FF14]'
+                                        }`}
+                                      >
+                                        {Number(oddBox.value).toFixed(2)}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* PESTAÑA 4: PLANTILLAS COMPLETAS E INCIDENCIAS EN VIVO */}
+                        {activeMatchTab === 'alineaciones' && (
+                          <div className="space-y-6">
+                            {/* Cronología de Incidencias */}
+                            <div className="bg-[#111827] border border-slate-800 rounded-2xl p-4">
+                              <h4 className="text-sm font-extrabold uppercase tracking-wider text-[#39FF14] mb-3">
+                                ⏱️ Incidencias Registradas en el Partido
+                              </h4>
+                              {details.eventos?.length > 0 ? (
+                                <div className="space-y-2">
+                                  {details.eventos.map((ev, i) => (
+                                    <div
+                                      key={i}
+                                      className="flex items-center justify-between bg-[#1c2636] border border-slate-800 rounded-xl px-4 py-2.5 text-sm"
+                                    >
+                                      <span>
+                                        <strong className="text-[#39FF14] font-mono mr-2">
+                                          {ev.minuto_ocurrencia}&apos;
+                                        </strong>
+                                        {ev.nombre_evento === 'Gol'
+                                          ? '⚽ Gol de '
+                                          : '🟨 Tarjeta Amarilla para '}
+                                        <strong className="text-white">{ev.nombre_jugador}</strong>
+                                      </span>
+                                      <span className="text-xs font-semibold text-slate-400">
+                                        {ev.nombre_equipo}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-slate-400 text-xs">
+                                  Sin goles ni tarjetas registradas en la bitácora aún.
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Plantillas Titulares por Equipo */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                              {[
+                                {
+                                  teamName: match.equipo_local,
+                                  dt: match.dt_local,
+                                  roster: localPlayers,
+                                  esLocal: true,
+                                },
+                                {
+                                  teamName: match.equipo_visitante,
+                                  dt: match.dt_visitante,
+                                  roster: visitorPlayers,
+                                  esLocal: false,
+                                },
+                              ].map((group) => (
+                                <div
+                                  key={group.teamName}
+                                  className="bg-[#111827] border border-slate-800 rounded-2xl p-4 space-y-3"
+                                >
+                                  <div className="pb-2.5 border-b border-slate-800">
+                                    <h5 className="text-sm font-extrabold text-white">
+                                      Plantilla {group.teamName}
+                                    </h5>
+                                    <span className="text-xs text-[#39FF14] font-semibold">
+                                      👔 DT: {group.dt}
+                                    </span>
+                                  </div>
+                                  <div className="space-y-2">
+                                    {group.roster.map((jug) => {
+                                      const nombreJug = jug.nombre_jugador || jug.nombre_completo;
+                                      return (
+                                        <div
+                                          key={jug.documento_jugador || nombreJug}
+                                          className="flex items-center justify-between bg-[#1c2636] border border-slate-800 rounded-xl px-3.5 py-2.5"
+                                        >
+                                          <div>
+                                            <span className="text-sm font-bold text-white block">
+                                              {nombreJug}
+                                            </span>
+                                            <span className="text-xs text-slate-400">
+                                              {jug.posicion_habitual}
+                                            </span>
+                                          </div>
+                                          {isAdmin && (
+                                            <div className="flex items-center gap-1.5">
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  handleUpdateLiveScore(
+                                                    match,
+                                                    group.esLocal ? 1 : 0,
+                                                    group.esLocal ? 0 : 1,
+                                                    'En Vivo',
+                                                    jug.documento_jugador,
+                                                    'Gol'
+                                                  )
+                                                }
+                                                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-[#39FF14] text-xs font-bold cursor-pointer"
+                                              >
+                                                +⚽ Gol
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  handleUpdateLiveScore(
+                                                    match,
+                                                    0,
+                                                    0,
+                                                    'En Vivo',
+                                                    jug.documento_jugador,
+                                                    'Tarjeta Amarilla'
+                                                  )
+                                                }
+                                                className="px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold cursor-pointer"
+                                              >
+                                                +🟨 Tarjeta
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {displayActiveMatches.map((match) => {
                   const matchOdds = oddsMap[match.codigo_partido] || {
                     'Gana Local': 1.85,
@@ -777,98 +1406,69 @@ function MatchesPanel({ user }) {
                   );
                   const localStyle = TEAM_STYLES[match.equipo_local] || { short: match.equipo_local };
                   const visStyle = TEAM_STYLES[match.equipo_visitante] || { short: match.equipo_visitante };
-                  const isExpanded = expandedMatch === match.codigo_partido;
-                  const details = matchDetailsCache[match.codigo_partido] || {
-                    alineaciones: [],
-                    eventos: [],
-                  };
-
-                  // Jugadores del partido (desde /api/sports/players o mercados "Gol: <Jugador>" en PostgreSQL)
-                  const matchPlayers = players.filter(
-                    (p) => p.nombre_equipo === match.equipo_local || p.nombre_equipo === match.equipo_visitante
-                  );
-                  const playerGoalMarkets = Object.entries(matchOdds)
-                    .filter(([mkt]) => mkt.startsWith('Gol: '))
-                    .map(([mkt, val]) => ({
-                      market: mkt,
-                      playerName: mkt.replace('Gol: ', ''),
-                      odd: Number(val),
-                    }));
-
-                  // Si aún no hay mercados de jugador en matchOdds, construirlos con los delanteros/volantes del partido
-                  const featuredScorers =
-                    playerGoalMarkets.length > 0
-                      ? playerGoalMarkets.slice(0, 4)
-                      : matchPlayers
-                          .filter((p) => p.posicion_habitual === 'Delantero' || p.posicion_habitual === 'Volante')
-                          .slice(0, 4)
-                          .map((p, idx) => ({
-                            market: `Gol: ${p.nombre_completo}`,
-                            playerName: p.nombre_completo,
-                            odd: 2.15 + idx * 0.2,
-                          }));
+                  const isPlayerSelection =
+                    selectedLine?.nombre_mercado?.startsWith('Gol: ') ||
+                    selectedLine?.nombre_mercado?.startsWith('Tarjeta: ');
 
                   return (
                     <article
                       key={match.codigo_partido}
-                      className="rounded-2xl bg-[#1c2636] border border-slate-700/60 hover:border-[#39FF14]/50 p-4 flex flex-col justify-between shadow-xl shadow-black/40 transition-all"
+                      className="rounded-2xl bg-[#1c2636] border border-slate-700/60 hover:border-[#39FF14]/50 p-5 flex flex-col justify-between shadow-xl shadow-black/40 transition-all"
                     >
                       {/* Indicador En Vivo / Jornada */}
-                      <div className="flex items-center justify-between text-[10px] mb-2">
+                      <div className="flex items-center justify-between text-xs mb-3">
                         <span className="text-slate-400 font-semibold">
-                          {match.nombre_jornada || 'Liga BetPlay'}
+                          {match.nombre_jornada || 'Liga BetPlay'} • {match.nombre_estadio}
                         </span>
                         {match.estado_partido === 'En Vivo' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/20 text-[#39FF14] font-bold">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/20 text-[#39FF14] font-bold text-[11px]">
                             <span className="w-1.5 h-1.5 rounded-full bg-[#39FF14] animate-ping" />
                             EN VIVO {liveMinute}&apos;
                           </span>
                         ) : (
-                          <span className="text-slate-400">{match.estado_partido}</span>
+                          <span className="text-slate-400 font-medium">{match.estado_partido}</span>
                         )}
                       </div>
 
-                      {/* Cabecera: Escudos, Nombres, Banderas y VS / Marcador */}
-                      <div className="grid grid-cols-3 items-center text-center my-1">
+                      {/* Cabecera Espaciosa: Escudos, Nombres Completos, DTs y Marcador */}
+                      <div
+                        onClick={() => handleToggleDetails(match.codigo_partido, 'goleadores')}
+                        className="grid grid-cols-3 items-center text-center my-2 cursor-pointer group"
+                        title="Haz clic para ingresar al partido"
+                      >
                         <div className="flex flex-col items-center">
                           <ClubCrest teamName={match.equipo_local} />
-                          <span className="mt-1.5 text-xs font-bold text-slate-100 truncate max-w-[90px]">
+                          <span className="mt-2 text-sm font-extrabold text-white group-hover:text-[#39FF14] transition">
                             {localStyle.short}
                           </span>
                           <ColombiaFlag />
+                          <span className="mt-1.5 text-[11px] text-slate-400">
+                            DT: <strong className="text-slate-200">{match.dt_local || 'Activo'}</strong>
+                          </span>
                         </div>
 
                         <div className="flex flex-col items-center justify-center">
-                          <span className="text-sm font-bold text-slate-300 tracking-wider">VS</span>
-                          <span className="mt-1 px-2.5 py-0.5 rounded-md bg-[#0f172a] border border-slate-700/80 text-xs font-black text-white font-mono">
+                          <span className="text-xs font-bold text-slate-400 tracking-wider">VS</span>
+                          <span className="my-1.5 px-3.5 py-1 rounded-xl bg-[#0f172a] border border-slate-700/80 text-base font-black text-white font-mono">
                             {match.marcador_local} - {match.marcador_visitante}
                           </span>
                         </div>
 
                         <div className="flex flex-col items-center">
                           <ClubCrest teamName={match.equipo_visitante} />
-                          <span className="mt-1.5 text-xs font-bold text-slate-100 truncate max-w-[90px]">
+                          <span className="mt-2 text-sm font-extrabold text-white group-hover:text-[#39FF14] transition">
                             {visStyle.short}
                           </span>
                           <ColombiaFlag />
+                          <span className="mt-1.5 text-[11px] text-slate-400">
+                            DT: <strong className="text-slate-200">{match.dt_visitante || 'Activo'}</strong>
+                          </span>
                         </div>
                       </div>
 
-                      {/* Directores Técnicos Actuales */}
-                      {(match.dt_local || match.dt_visitante) && (
-                        <div className="mt-1.5 px-2 py-1 rounded-lg bg-[#111827]/80 border border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
-                          <span className="truncate max-w-[48%]" title={`DT ${match.equipo_local}`}>
-                            DT: <strong className="text-slate-200">{match.dt_local || 'Por definir'}</strong>
-                          </span>
-                          <span className="truncate max-w-[48%] text-right" title={`DT ${match.equipo_visitante}`}>
-                            DT: <strong className="text-slate-200">{match.dt_visitante || 'Por definir'}</strong>
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Mercados de Apuesta: 1X2 + Goles y Ambos Marcan */}
-                      <div className="space-y-1.5 my-3">
-                        <div className="grid grid-cols-3 gap-1.5">
+                      {/* Mercados Rápidos: 1X2 + Goles y Ambos Marcan */}
+                      <div className="space-y-2 my-3.5">
+                        <div className="grid grid-cols-3 gap-2">
                           {[
                             { label: 'Local', market: 'Gana Local', value: oddLocal },
                             { label: 'Empate', market: 'Empate', value: oddEmpate },
@@ -880,20 +1480,20 @@ function MatchesPanel({ user }) {
                                 key={oddBox.market}
                                 type="button"
                                 onClick={() => handleSelectOdd(match, oddBox.market, oddBox.value)}
-                                className={`rounded-xl py-1.5 px-1 text-center transition-all cursor-pointer border ${
+                                className={`rounded-xl py-2 px-2 text-center transition-all cursor-pointer border ${
                                   isSelected
                                     ? 'bg-[#39FF14] text-slate-950 border-[#39FF14] shadow-md shadow-[#39FF14]/30'
                                     : 'bg-[#111827] hover:bg-slate-900 text-white border-slate-800 hover:border-[#39FF14]/50'
                                 }`}
                               >
                                 <span
-                                  className={`block text-[10px] font-medium ${
+                                  className={`block text-[11px] font-medium ${
                                     isSelected ? 'text-slate-900 font-bold' : 'text-slate-400'
                                   }`}
                                 >
                                   {oddBox.label}
                                 </span>
-                                <span className="block text-xs font-extrabold font-mono mt-0.5">
+                                <span className="block text-sm font-extrabold font-mono mt-0.5">
                                   {Number(oddBox.value).toFixed(2)}
                                 </span>
                               </button>
@@ -901,8 +1501,7 @@ function MatchesPanel({ user }) {
                           })}
                         </div>
 
-                        {/* Segunda fila de mercados: Más de 2.5, Menos de 2.5 y Ambos Marcan */}
-                        <div className="grid grid-cols-3 gap-1.5">
+                        <div className="grid grid-cols-3 gap-2">
                           {[
                             { label: '+2.5 Goles', market: 'Más de 2.5 Goles', value: oddMas25 },
                             { label: '-2.5 Goles', market: 'Menos de 2.5 Goles', value: oddMenos25 },
@@ -914,20 +1513,20 @@ function MatchesPanel({ user }) {
                                 key={oddBox.market}
                                 type="button"
                                 onClick={() => handleSelectOdd(match, oddBox.market, oddBox.value)}
-                                className={`rounded-xl py-1.5 px-1 text-center transition-all cursor-pointer border ${
+                                className={`rounded-xl py-2 px-2 text-center transition-all cursor-pointer border ${
                                   isSelected
                                     ? 'bg-[#39FF14] text-slate-950 border-[#39FF14] shadow-md shadow-[#39FF14]/30'
                                     : 'bg-[#0d1526] hover:bg-slate-900 text-white border-slate-800/90 hover:border-[#39FF14]/50'
                                 }`}
                               >
                                 <span
-                                  className={`block text-[9px] font-medium truncate ${
+                                  className={`block text-[11px] font-medium ${
                                     isSelected ? 'text-slate-900 font-bold' : 'text-slate-400'
                                   }`}
                                 >
                                   {oddBox.label}
                                 </span>
-                                <span className="block text-xs font-extrabold font-mono mt-0.5">
+                                <span className="block text-sm font-extrabold font-mono mt-0.5">
                                   {Number(oddBox.value).toFixed(2)}
                                 </span>
                               </button>
@@ -936,74 +1535,42 @@ function MatchesPanel({ user }) {
                         </div>
                       </div>
 
-                      {/* Mercados de Jugadores: Goleador en Cualquier Momento */}
-                      {featuredScorers.length > 0 && (
-                        <div className="my-1.5 pt-2 border-t border-slate-800/80">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#39FF14]">
-                              ⚽ Apuesta Jugador (Anota Gol)
-                            </span>
-                            <span className="text-[9px] text-slate-400">1 clic al cupón</span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {featuredScorers.map((sc) => {
-                              const isSelected = selectedLine?.nombre_mercado === sc.market;
-                              return (
-                                <button
-                                  key={sc.market}
-                                  type="button"
-                                  onClick={() => handleSelectOdd(match, sc.market, sc.odd)}
-                                  className={`rounded-xl py-1.5 px-2 flex items-center justify-between gap-1 text-left transition-all cursor-pointer border ${
-                                    isSelected
-                                      ? 'bg-[#39FF14] text-slate-950 border-[#39FF14] shadow-md shadow-[#39FF14]/30'
-                                      : 'bg-[#111827] hover:bg-slate-900 text-white border-slate-800 hover:border-[#39FF14]/50'
-                                  }`}
-                                >
-                                  <span
-                                    className={`text-[10px] font-bold truncate ${
-                                      isSelected ? 'text-slate-950' : 'text-slate-200'
-                                    }`}
-                                    title={sc.playerName}
-                                  >
-                                    {sc.playerName}
-                                  </span>
-                                  <span
-                                    className={`text-[10px] font-extrabold font-mono shrink-0 ${
-                                      isSelected ? 'text-slate-950' : 'text-[#39FF14]'
-                                    }`}
-                                  >
-                                    {Number(sc.odd).toFixed(2)}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Botón para ver Alineaciones Titulares, DTs y Eventos del Partido */}
+                      {/* Botón Principal para Ingresar al Partido y Apostar por Jugadores */}
                       <button
                         type="button"
-                        onClick={() => handleToggleDetails(match.codigo_partido)}
-                        className="mt-2.5 w-full rounded-xl bg-[#111827] hover:bg-slate-900 border border-slate-800/90 hover:border-[#39FF14]/50 px-3 py-2 flex items-center justify-between cursor-pointer transition text-xs"
+                        onClick={() => handleToggleDetails(match.codigo_partido, 'goleadores')}
+                        className={`mt-1 w-full rounded-xl px-4 py-2.5 flex items-center justify-between cursor-pointer transition border ${
+                          isPlayerSelection
+                            ? 'bg-[#39FF14]/15 border-[#39FF14] text-[#39FF14]'
+                            : 'bg-[#111827] hover:bg-slate-900 border-slate-800 hover:border-[#39FF14]/60 text-slate-200'
+                        }`}
                       >
-                        <span className="font-bold text-slate-200">
-                          {isExpanded ? 'Ocultar Plantilla e Incidencias' : 'Ver Plantilla, DTs e Incidencias'}
-                        </span>
-                        <span className="text-[#39FF14] font-extrabold">
-                          {isExpanded ? '▲' : '▼'}
+                        <div className="flex items-center gap-2 text-left">
+                          <span className="text-base">⚽</span>
+                          <div>
+                            <span className="text-xs font-extrabold block text-white">
+                              {isPlayerSelection
+                                ? `Seleccionado: ${selectedLine.nombre_mercado}`
+                                : 'Ingresar al Partido • Apuestas de Jugadores'}
+                            </span>
+                            <span className="text-[11px] text-slate-400 block">
+                              Goleadores, tarjetas, técnicos y alineaciones completas
+                            </span>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-lg bg-[#1c2636] text-[#39FF14] text-xs font-extrabold shrink-0">
+                          Entrar →
                         </span>
                       </button>
 
                       {/* Controles rápidos de marcador en vivo para el Administrador */}
                       {isAdmin && (
-                        <div className="mt-2.5 pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-1 text-[10px]">
+                        <div className="mt-3 pt-2.5 border-t border-slate-800 flex flex-wrap items-center justify-between gap-1 text-[10px]">
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => handleUpdateLiveScore(match, -1, 0, 'En Vivo')}
-                              className="px-1.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
-                              title="Restar 1 gol al local"
+                              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
                             >
                               -1
                             </button>
@@ -1020,8 +1587,7 @@ function MatchesPanel({ user }) {
                             <button
                               type="button"
                               onClick={() => handleUpdateLiveScore(match, 0, -1, 'En Vivo')}
-                              className="px-1.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
-                              title="Restar 1 gol al visitante"
+                              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer"
                             >
                               -1
                             </button>
@@ -1044,159 +1610,10 @@ function MatchesPanel({ user }) {
                                 match.estado_partido === 'En Vivo' ? 'Finalizado' : 'En Vivo'
                               )
                             }
-                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
                           >
                             {match.estado_partido === 'En Vivo' ? 'Finalizar' : 'Poner En Vivo'}
                           </button>
-                        </div>
-                      )}
-
-                      {/* Desplegable de Eventos, Directores Técnicos y Alineaciones con Apuestas por Jugador */}
-                      {isExpanded && (
-                        <div className="mt-3 pt-3 border-t border-slate-800 text-[11px] space-y-3 bg-slate-950/90 p-3 rounded-xl">
-                          <div className="space-y-1 border-b border-slate-800 pb-2">
-                            <p className="font-bold text-[#39FF14]">
-                              🏟️ {match.nombre_estadio} • Árbitro: {match.arbitro || 'Designado'}
-                            </p>
-                            <div className="flex justify-between text-[10px] text-slate-300">
-                              <span>
-                                DT {localStyle.short}: <strong className="text-white">{match.dt_local || 'Activo'}</strong>
-                              </span>
-                              <span>
-                                DT {visStyle.short}: <strong className="text-white">{match.dt_visitante || 'Activo'}</strong>
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Plantilla de Jugadores del Partido + Cuotas de Gol y Tarjeta */}
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 block">
-                              Plantilla de Jugadores y Mercados Individuales:
-                            </span>
-                            <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                              {(details.alineaciones?.length > 0 ? details.alineaciones : matchPlayers).map((jug) => {
-                                const nombreJug = jug.nombre_jugador || jug.nombre_completo;
-                                const mktGol = `Gol: ${nombreJug}`;
-                                const mktTarjeta = `Tarjeta: ${nombreJug}`;
-                                const cuotaGol =
-                                  matchOdds[mktGol] ||
-                                  (jug.posicion_habitual === 'Delantero'
-                                    ? 2.25
-                                    : jug.posicion_habitual === 'Volante'
-                                      ? 2.95
-                                      : 4.5);
-                                const cuotaTarjeta = matchOdds[mktTarjeta] || 3.2;
-                                const isGolSelected = selectedLine?.nombre_mercado === mktGol;
-                                const isCardSelected = selectedLine?.nombre_mercado === mktTarjeta;
-                                const esLocal = jug.nombre_equipo === match.equipo_local;
-
-                                return (
-                                  <div
-                                    key={jug.documento_jugador || nombreJug}
-                                    className="flex items-center justify-between gap-1.5 bg-[#111827] border border-slate-800/80 rounded-lg px-2 py-1.5"
-                                  >
-                                    <div className="min-w-0 flex-1">
-                                      <span className="font-bold text-white block truncate text-[10px]">
-                                        {nombreJug}
-                                      </span>
-                                      <span className="text-[9px] text-slate-400 block truncate">
-                                        {esLocal ? localStyle.short : visStyle.short} • {jug.posicion_habitual}
-                                      </span>
-                                    </div>
-
-                                    {isAdmin ? (
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            handleUpdateLiveScore(
-                                              match,
-                                              esLocal ? 1 : 0,
-                                              esLocal ? 0 : 1,
-                                              'En Vivo',
-                                              jug.documento_jugador,
-                                              'Gol'
-                                            )
-                                          }
-                                          className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-[#39FF14] text-[9px] font-bold cursor-pointer"
-                                          title="Registrar Gol de este jugador"
-                                        >
-                                          +⚽ Gol
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            handleUpdateLiveScore(
-                                              match,
-                                              0,
-                                              0,
-                                              'En Vivo',
-                                              jug.documento_jugador,
-                                              'Tarjeta Amarilla'
-                                            )
-                                          }
-                                          className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[9px] font-bold cursor-pointer"
-                                          title="Registrar Tarjeta Amarilla a este jugador"
-                                        >
-                                          +🟨 Tarj
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        {jug.posicion_habitual !== 'Portero' && (
-                                          <button
-                                            type="button"
-                                            onClick={() => handleSelectOdd(match, mktGol, cuotaGol)}
-                                            className={`px-2 py-0.5 rounded text-[9px] font-extrabold font-mono border transition cursor-pointer ${
-                                              isGolSelected
-                                                ? 'bg-[#39FF14] text-slate-950 border-[#39FF14]'
-                                                : 'bg-slate-900 hover:border-[#39FF14] text-[#39FF14] border-slate-700'
-                                            }`}
-                                            title={`Apostar a que ${nombreJug} anota gol`}
-                                          >
-                                            ⚽ {Number(cuotaGol).toFixed(2)}
-                                          </button>
-                                        )}
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSelectOdd(match, mktTarjeta, cuotaTarjeta)}
-                                          className={`px-2 py-0.5 rounded text-[9px] font-extrabold font-mono border transition cursor-pointer ${
-                                            isCardSelected
-                                              ? 'bg-[#39FF14] text-slate-950 border-[#39FF14]'
-                                              : 'bg-slate-900 hover:border-amber-400 text-amber-300 border-slate-700'
-                                          }`}
-                                          title={`Apostar a que ${nombreJug} recibe tarjeta`}
-                                        >
-                                          🟨 {Number(cuotaTarjeta).toFixed(2)}
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {/* Cronología de Incidencias en Vivo */}
-                          <div className="space-y-1 border-t border-slate-800 pt-2">
-                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 block">
-                              Incidencias del Partido:
-                            </span>
-                            {details.eventos?.length > 0 ? (
-                              details.eventos.map((ev, i) => (
-                                <div key={i} className="text-slate-300 flex items-center justify-between text-[10px]">
-                                  <span>
-                                    <strong className="text-[#39FF14] font-mono">{ev.minuto_ocurrencia}&apos;</strong>{' '}
-                                    {ev.nombre_evento === 'Gol' ? '⚽ Gol' : '🟨 Tarjeta'} —{' '}
-                                    <strong className="text-white">{ev.nombre_jugador}</strong>
-                                  </span>
-                                  <span className="text-slate-500 text-[9px]">{ev.nombre_equipo}</span>
-                                </div>
-                              ))
-                            ) : (
-                              <p className="text-slate-500 text-[10px]">Sin goles ni tarjetas registradas aún.</p>
-                            )}
-                          </div>
                         </div>
                       )}
                     </article>
