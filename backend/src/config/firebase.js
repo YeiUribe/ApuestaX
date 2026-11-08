@@ -8,53 +8,39 @@ let serviceAccount;
 const localKeyPath = path.join(__dirname, 'firebase-key.json');
 
 // ============================================================
-// CREDENCIALES FIREBASE
+// FIREBASE CREDENTIALS
 // ============================================================
 
 // Desarrollo local:
-// usa firebase-key.json si existe.
+// utiliza firebase-key.json.
 //
-// Azure / producción:
-// usa variables de entorno y NO necesita firebase-key.json.
-if (fs.existsSync(localKeyPath)) {
+// Azure:
+// utiliza el JSON completo codificado en Base64.
+if (process.env.FIREBASE_SERVICE_ACCOUNT_B64) {
+    const decodedCredentials = Buffer.from(
+        process.env.FIREBASE_SERVICE_ACCOUNT_B64,
+        'base64'
+    ).toString('utf8');
+
+    serviceAccount = JSON.parse(decodedCredentials);
+
+    console.log(
+        '[Firebase] Credenciales cargadas desde Azure'
+    );
+} else if (fs.existsSync(localKeyPath)) {
     serviceAccount = require(localKeyPath);
 
     console.log(
-        '[Firebase] Credenciales cargadas desde firebase-key.json'
+        '[Firebase] Credenciales cargadas desde firebase-key.json local'
     );
 } else {
-    const requiredVariables = [
-        'FIREBASE_PROJECT_ID',
-        'FIREBASE_CLIENT_EMAIL',
-        'FIREBASE_PRIVATE_KEY'
-    ];
-
-    const missingVariables = requiredVariables.filter(
-        (variable) => !process.env[variable]
-    );
-
-    if (missingVariables.length > 0) {
-        throw new Error(
-            `[Firebase] Faltan variables de entorno: ${missingVariables.join(', ')}`
-        );
-    }
-
-    serviceAccount = {
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-
-        // Azure guarda los saltos de línea como \n.
-        // Firebase necesita convertirlos nuevamente a saltos reales.
-        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
-    };
-
-    console.log(
-        '[Firebase] Credenciales cargadas desde variables de entorno'
+    throw new Error(
+        '[Firebase] No se encontraron credenciales de Firebase Admin'
     );
 }
 
 // ============================================================
-// INICIALIZAR FIREBASE ADMIN
+// FIREBASE ADMIN
 // ============================================================
 
 const firebaseApp =
@@ -66,6 +52,8 @@ const firebaseApp =
 
 const dbFirebase = getFirestore(firebaseApp);
 
-console.log('[Firebase] Firebase Admin inicializado');
+console.log(
+    '[Firebase] Firebase Admin inicializado correctamente'
+);
 
 module.exports = dbFirebase;
