@@ -1,14 +1,21 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Backend API de ApuestaX",
+  "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "init:sqlserver": "node src/config/initSqlServer.js"
   },
-  "keywords": [],
+  "engines": {
+    "node": "24.x"
+  },
+  "keywords": [
+    "apuestax",
+    "node",
+    "express"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
