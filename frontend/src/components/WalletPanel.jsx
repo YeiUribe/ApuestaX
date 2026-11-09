@@ -522,42 +522,13 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
 
   return (
     <div className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Cabecera Dinámica según la sección activa (sin barras redundantes) */}
+      {/* Cabecera Dinámica según la sección activa (sin tarjetas de saldo redundantes con la barra superior) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-6 border-b border-slate-800">
         <div>
           <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
             {sectionMeta.title} <span className="text-[#39FF14]">{sectionMeta.highlight}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">{sectionMeta.subtitle}</p>
-        </div>
-
-        <div className="grid grid-cols-3 sm:flex items-center gap-2 sm:gap-3 w-full md:w-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-3 sm:px-5 py-2.5 sm:py-3 shadow-lg">
-            <span className="block text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400 font-semibold truncate">
-              Saldo Total
-            </span>
-            <span className="text-sm sm:text-2xl font-black text-[#39FF14]">
-              ${saldo.toLocaleString('es-CO')} <span className="text-[10px] sm:text-xs font-bold text-slate-300">COP</span>
-            </span>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-3 sm:px-5 py-2.5 sm:py-3 shadow-lg">
-            <span className="block text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400 font-semibold truncate">
-              Saldo Real
-            </span>
-            <span className="text-sm sm:text-2xl font-black text-white">
-              ${saldoReal.toLocaleString('es-CO')} <span className="text-[10px] sm:text-xs font-bold text-slate-300">COP</span>
-            </span>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-3 sm:px-5 py-2.5 sm:py-3 shadow-lg">
-            <span className="block text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400 font-semibold truncate">
-              Bono Activo
-            </span>
-            <span className="text-sm sm:text-2xl font-black text-[#39FF14]">
-              ${bonoActivo.toLocaleString('es-CO')} <span className="text-[10px] sm:text-xs font-bold text-slate-300">COP</span>
-            </span>
-          </div>
         </div>
       </div>
 
@@ -1127,6 +1098,12 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
                 <span className="text-slate-400">Saldo Real:</span>
                 <strong className="text-white font-mono">
                   ${saldoReal.toLocaleString('es-CO')} COP
+                </strong>
+              </div>
+              <div className="flex justify-between py-2 border-b border-slate-800/70">
+                <span className="text-slate-400">Bono Activo:</span>
+                <strong className="text-[#39FF14] font-mono">
+                  ${bonoActivo.toLocaleString('es-CO')} COP
                 </strong>
               </div>
               <div className="flex justify-between py-2">
