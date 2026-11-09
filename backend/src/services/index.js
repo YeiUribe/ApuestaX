@@ -135,18 +135,27 @@ const PaymentService = {
 
 
         // ----------------------------------------------------
-        // Sandbox local
+        // 1. Validar firma de integridad SHA-256 generada por preparePayment
         // ----------------------------------------------------
-        // En desarrollo permitimos eventos sin firma para
-        // continuar utilizando el Sandbox local.
-        //
-        // En producción, si no existe firma, se rechaza.
-        // ----------------------------------------------------
-
         if (!hasValidSignatureStructure) {
+            if (
+                typeof eventBody?.signature === 'string' &&
+                eventBody?.reference &&
+                eventBody?.amountInCents
+            ) {
+                const expectedIntegrity =
+                    this.generateWompiSignature(
+                        eventBody.reference,
+                        eventBody.amountInCents,
+                        eventBody.currency || 'COP'
+                    );
+
+                if (eventBody.signature === expectedIntegrity) {
+                    return true;
+                }
+            }
 
             if (isDevelopment) {
-
                 console.warn(
                     '[Wompi] Webhook sin firma permitido por NODE_ENV=development'
                 );
@@ -155,7 +164,7 @@ const PaymentService = {
             }
 
             console.error(
-                '[Wompi] Webhook rechazado: firma inexistente.'
+                '[Wompi] Webhook rechazado: firma inexistente o inválida.'
             );
 
             return false;

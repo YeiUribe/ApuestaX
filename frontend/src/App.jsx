@@ -4,12 +4,25 @@ import AuthPage from './components/Login';
 import WelcomeDashboard from './components/WelcomeDashboard';
 import MatchesPanel from './components/MatchesPanel';
 import WalletPanel from './components/WalletPanel';
-import { logoutSession, getWallet } from './services/userService';
+import { logoutSession, getWallet, calcularDesgloseBilletera } from './services/userService';
 
 function App() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' | 'matches' | 'wallet' | 'users'
-  const [walletSection, setWalletSection] = useState('recarga'); // 'recarga' | 'retiro' | 'historial' | 'promocion' | 'puntos' | 'cuenta' | 'ayuda'
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('apuestax_user');
+      if (!savedUser) return null;
+      const parsed = JSON.parse(savedUser);
+      return parsed?.cedula ? parsed : null;
+    } catch {
+      return null;
+    }
+  });
+  const [currentView, setCurrentView] = useState(() => {
+    return localStorage.getItem('apuestax_view') || 'dashboard';
+  }); // 'dashboard' | 'matches' | 'wallet' | 'users'
+  const [walletSection, setWalletSection] = useState(() => {
+    return localStorage.getItem('apuestax_wallet_section') || 'recarga';
+  }); // 'recarga' | 'retiro' | 'historial' | 'promocion' | 'puntos' | 'cuenta' | 'ayuda'
   const [pendingQuickBet, setPendingQuickBet] = useState(null);
 
   // Menú desplegable superior derecho (estilo BetPlay / ApuestaX)
@@ -34,25 +47,9 @@ function App() {
     try {
       const data = await getWallet(cedula);
       if (data && data.saldo_disponible !== undefined) {
-        const totalDisponible = Number(data.saldo_disponible) || 0;
-        const movs = Array.isArray(data.movimientos) ? data.movimientos : [];
-        const totalBonosHist = movs
-          .filter((m) => String(m.nombre_tipo || '').toLowerCase().includes('bono'))
-          .reduce((acc, m) => acc + (Number(m.monto) || 0), 0);
-        const totalRecargasYPremios = movs
-          .filter(
-            (m) =>
-              !String(m.nombre_tipo || '').toLowerCase().includes('bono') &&
-              (m.naturaleza_movimiento === 'Ingreso' ||
-                ['Recarga PSE', 'Recarga Manual', 'Pago Premio', 'Reembolso Apuesta'].includes(m.nombre_tipo))
-          )
-          .reduce((acc, m) => acc + (Number(m.monto) || 0), 0);
-
-        const real = Math.min(totalDisponible, totalRecargasYPremios);
-        const bono = Math.max(0, Math.min(totalDisponible - real, totalBonosHist || 20000));
-
-        setSaldoReal( totalDisponible - bono );
-        setBonoActivo(bono);
+        const { saldoReal: realCalc, bonoActivo: bonoCalc } = calcularDesgloseBilletera(data);
+        setSaldoReal(realCalc);
+        setBonoActivo(bonoCalc);
         setBonoPendiente(0);
       }
     } catch {
@@ -109,7 +106,14 @@ function App() {
   };
 
   const handleLoginSuccess = (user) => {
-    setCurrentUser(user);
+    const normalizedUser = user?.user || user;
+    setCurrentUser(normalizedUser);
+    try {
+      localStorage.setItem('apuestax_user', JSON.stringify(normalizedUser));
+      localStorage.setItem('apuestax_view', 'dashboard');
+    } catch {
+      // Ignorar si el navegador restringe almacenamiento
+    }
     setCurrentView('dashboard');
     setSessionSeconds(0);
     setMenuOpen(false);
@@ -125,8 +129,25 @@ function App() {
   const openUserSection = (section) => {
     setWalletSection(section);
     setCurrentView('wallet');
+    try {
+      localStorage.setItem('apuestax_wallet_section', section);
+      localStorage.setItem('apuestax_view', 'wallet');
+    } catch {
+      // Ignorar errores de almacenamiento
+    }
     setMenuOpen(false);
   };
+
+  useEffect(() => {
+    if (currentUser) {
+      try {
+        localStorage.setItem('apuestax_view', currentView);
+        localStorage.setItem('apuestax_wallet_section', walletSection);
+      } catch {
+        // Ignorar errores de almacenamiento
+      }
+    }
+  }, [currentUser, currentView, walletSection]);
 
   // Si el usuario no ha iniciado sesión, solo puede ver la pantalla de Autenticación
   if (!currentUser) {

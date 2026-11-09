@@ -219,16 +219,46 @@ router.post('/webhook', async (req, res) => {
         await client.query('BEGIN');
 
         // ----------------------------------------------------
-        // Verificar si el pago ya fue procesado
+        // Crear billetera si todavía no existe y bloquear fila
+        // con FOR UPDATE para serializar peticiones concurrentes
+        // ----------------------------------------------------
+
+        await client.query(
+            `
+            INSERT INTO billetera (
+                cedula_usuario,
+                saldo_disponible
+            )
+            VALUES ($1, 0.00)
+            ON CONFLICT (cedula_usuario) DO NOTHING
+            `,
+            [cedula_usuario]
+        );
+
+        const walletRes = await client.query(
+            `
+            SELECT saldo_disponible
+            FROM billetera
+            WHERE cedula_usuario = $1
+            FOR UPDATE
+            `,
+            [cedula_usuario]
+        );
+
+        const saldoActual =
+            Number(walletRes.rows[0].saldo_disponible);
+
+        // ----------------------------------------------------
+        // Verificar idempotencia por referencia_externa
         // ----------------------------------------------------
 
         const paymentExists = await client.query(
             `
-    SELECT 1
-    FROM historial_billetera
-    WHERE referencia_externa = $1
-    LIMIT 1
-    `,
+            SELECT monto, fecha_hora
+            FROM historial_billetera
+            WHERE referencia_externa = $1
+            LIMIT 1
+            `,
             [reference]
         );
 
@@ -254,46 +284,16 @@ router.post('/webhook', async (req, res) => {
 
             return res.status(200).json({
                 message: 'La transacción ya había sido procesada anteriormente.',
+                persisted: true,
+                duplicated: true,
                 reference,
                 status: 'APPROVED',
-                duplicated: true,
+                cedula_usuario,
+                banco_origen,
+                monto_acreditado: Number(paymentExists.rows[0].monto),
+                nuevo_saldo: saldoActual,
             });
         }
-
-        // ----------------------------------------------------
-        // Crear billetera si todavía no existe
-        // ----------------------------------------------------
-
-        await client.query(
-            `
-            INSERT INTO billetera (
-                cedula_usuario,
-                saldo_disponible
-            )
-            VALUES ($1, 0.00)
-            ON CONFLICT (cedula_usuario) DO NOTHING
-            `,
-            [cedula_usuario]
-        );
-
-
-        // ----------------------------------------------------
-        // Bloquear billetera mientras actualizamos el saldo
-        // ----------------------------------------------------
-
-        const walletRes = await client.query(
-            `
-            SELECT saldo_disponible
-            FROM billetera
-            WHERE cedula_usuario = $1
-            FOR UPDATE
-            `,
-            [cedula_usuario]
-        );
-
-
-        const saldoActual =
-            Number(walletRes.rows[0].saldo_disponible);
 
         const nuevoSaldo =
             (saldoActual + Number(montoCop)).toFixed(2);
@@ -341,21 +341,22 @@ router.post('/webhook', async (req, res) => {
         // Registrar movimiento
         // ----------------------------------------------------
 
-        await client.query(
+        const insertHistoryRes = await client.query(
             `
-    INSERT INTO historial_billetera (
-        cedula_usuario,
-        nombre_tipo,
-        monto,
-        referencia_externa
-    )
-    VALUES (
-        $1,
-        'Recarga PSE',
-        $2,
-        $3
-    )
-    `,
+            INSERT INTO historial_billetera (
+                cedula_usuario,
+                nombre_tipo,
+                monto,
+                referencia_externa
+            )
+            VALUES (
+                $1,
+                'Recarga PSE',
+                $2,
+                $3
+            )
+            RETURNING cedula_usuario, fecha_hora, nombre_tipo, monto, referencia_externa
+            `,
             [
                 cedula_usuario,
                 montoCop,
@@ -443,10 +444,18 @@ router.post('/webhook', async (req, res) => {
             message:
                 'Pago aprobado y acreditado en billetera.',
 
+            persisted:
+                true,
+
+            duplicated:
+                false,
+
             reference,
 
             status:
                 'APPROVED',
+
+            cedula_usuario,
 
             banco_origen,
 
@@ -455,6 +464,9 @@ router.post('/webhook', async (req, res) => {
 
             nuevo_saldo:
                 Number(nuevoSaldo),
+
+            movimiento:
+                insertHistoryRes.rows[0] || null,
 
         });
 

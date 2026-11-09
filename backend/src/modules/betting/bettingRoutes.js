@@ -18,6 +18,8 @@ const {
     LoginAudit,
 } = require('../rules/mongoSchemas');
 
+const { PaymentService } = require('../../services');
+
 
 // ============================================================
 // FUNCIONES AUXILIARES
@@ -233,9 +235,17 @@ router.post('/wallet/recharge', async (req, res) => {
         cedula_usuario,
         monto,
         nombre_tipo = 'Recarga Manual',
+        reference,
+        referencia_externa,
+        amountInCents,
+        currency = 'COP',
+        signature,
+        status,
     } = req.body;
 
     const numericMonto = Number(monto);
+    const referenciaIdempotente =
+        (referencia_externa || reference || '').trim() || null;
 
     if (
         !cedula_usuario ||
@@ -245,6 +255,34 @@ router.post('/wallet/recharge', async (req, res) => {
             message:
                 'Ingresa una cédula y un monto válido para recargar.',
         });
+    }
+
+    // Si es una recarga PSE / Pasarela Wompi, exigir evidencia válida de aprobación
+    // (status === 'APPROVED', referencia PSE y firma de integridad SHA-256 válida)
+    if (nombre_tipo === 'Recarga PSE') {
+        const expectedCents =
+            Number(amountInCents) || Math.round(numericMonto * 100);
+
+        const expectedSignature =
+            referenciaIdempotente
+                ? PaymentService.generateWompiSignature(
+                      referenciaIdempotente,
+                      expectedCents,
+                      currency || 'COP'
+                  )
+                : null;
+
+        if (
+            status !== 'APPROVED' ||
+            !referenciaIdempotente ||
+            !signature ||
+            signature !== expectedSignature
+        ) {
+            return res.status(401).json({
+                message:
+                    'No existe evidencia válida de aprobación de la pasarela Wompi / PSE para acreditar esta recarga.',
+            });
+        }
     }
 
     let minRecarga = 10000;
@@ -306,6 +344,34 @@ router.post('/wallet/recharge', async (req, res) => {
         const saldoActual =
             Number(walletResult.rows[0].saldo_disponible);
 
+        // Idempotencia: impedir que una misma referencia PSE/Wompi se acredite dos veces
+        if (referenciaIdempotente) {
+            const existingTx = await client.query(
+                `
+                SELECT monto, fecha_hora
+                FROM historial_billetera
+                WHERE referencia_externa = $1
+                LIMIT 1
+                `,
+                [referenciaIdempotente]
+            );
+
+            if (existingTx.rowCount > 0) {
+                await client.query('ROLLBACK');
+
+                return res.status(200).json({
+                    message:
+                        'La transacción ya había sido procesada anteriormente.',
+                    persisted: true,
+                    duplicated: true,
+                    reference: referenciaIdempotente,
+                    cedula_usuario,
+                    monto_recargado: Number(existingTx.rows[0].monto),
+                    nuevo_saldo: saldoActual,
+                });
+            }
+        }
+
         const nuevoSaldo =
             (saldoActual + numericMonto).toFixed(2);
 
@@ -332,19 +398,22 @@ router.post('/wallet/recharge', async (req, res) => {
             [nombre_tipo]
         );
 
-        await client.query(
+        const insertHistoryRes = await client.query(
             `
             INSERT INTO historial_billetera (
                 cedula_usuario,
                 nombre_tipo,
-                monto
+                monto,
+                referencia_externa
             )
-            VALUES ($1, $2, $3)
+            VALUES ($1, $2, $3, $4)
+            RETURNING cedula_usuario, fecha_hora, nombre_tipo, monto, referencia_externa
             `,
             [
                 cedula_usuario,
                 nombre_tipo,
                 numericMonto,
+                referenciaIdempotente,
             ]
         );
 
@@ -353,9 +422,13 @@ router.post('/wallet/recharge', async (req, res) => {
         return res.json({
             message:
                 'Recarga acreditada exitosamente.',
+            persisted: true,
+            duplicated: false,
+            reference: referenciaIdempotente,
             cedula_usuario,
             monto_recargado: numericMonto,
             nuevo_saldo: Number(nuevoSaldo),
+            movimiento: insertHistoryRes.rows[0] || null,
         });
     } catch (error) {
         await client.query('ROLLBACK');

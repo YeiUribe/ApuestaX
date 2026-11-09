@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   getWallet,
+  calcularDesgloseBilletera,
   rechargeWallet,
   withdrawWallet,
   preparePayment,
@@ -10,44 +11,6 @@ import {
   cancelTicket,
   getRules,
 } from '../services/userService';
-
-const FALLBACK_MOVIMIENTOS = [
-  {
-    fecha_hora: '2026-09-02T10:05:00',
-    nombre_tipo: 'Bono Bienvenida',
-    monto: 50000,
-    naturaleza_movimiento: 'Ingreso',
-  },
-  {
-    fecha_hora: '2026-09-02T10:00:00',
-    nombre_tipo: 'Recarga PSE',
-    monto: 100000,
-    naturaleza_movimiento: 'Ingreso',
-  },
-];
-
-const FALLBACK_TICKETS = [
-  {
-    codigo_ticket: 'TICK-001',
-    cedula_usuario: '1035000001',
-    origen_fondos: 'PSE',
-    monto_total: 20000,
-    posible_ganancia_total: 42000,
-    estado_ticket: 'Pendiente',
-    fecha_emision: '2026-08-01T10:00:00',
-    lineas: [{ codigo_partido: 'NAL-MIL-F1', nombre_mercado: 'Gana Local', valor_cuota_congelada: 2.1 }],
-  },
-  {
-    codigo_ticket: 'TICK-004',
-    cedula_usuario: '1035000001',
-    origen_fondos: 'PSE',
-    monto_total: 10000,
-    posible_ganancia_total: 25000,
-    estado_ticket: 'Pendiente',
-    fecha_emision: '2026-08-08T14:20:00',
-    lineas: [{ codigo_partido: 'ONC-NAL-F2', nombre_mercado: 'Más de 2.5 Goles', valor_cuota_congelada: 2.5 }],
-  },
-];
 
 const BANCOS_PSE = ['Bancolombia', 'Nequi', 'Davivienda', 'Banco de Bogotá', 'DaviPlata'];
 
@@ -59,12 +22,13 @@ const CODIGOS_PROMO = {
 };
 
 function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
-  const activeCedula = user?.cedula || '1035000001';
+  const activeCedula = user?.cedula || '';
   const isAdmin = user?.nombre_rol === 'Administrador';
 
-  const [saldo, setSaldo] = useState(150000);
-  const [bonoActivo, setBonoActivo] = useState(25000);
-  const [puntosApuestaX, setPuntosApuestaX] = useState(1450);
+  const [saldo, setSaldo] = useState(0);
+  const [saldoReal, setSaldoReal] = useState(0);
+  const [bonoActivo, setBonoActivo] = useState(0);
+  const [puntosApuestaX, setPuntosApuestaX] = useState(1200);
   const [movimientos, setMovimientos] = useState([]);
   const [tickets, setTickets] = useState([]);
   const [reglas, setReglas] = useState([]);
@@ -92,7 +56,45 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
     }
   }, [initialSection]);
 
-  const loadWalletAndHistory = async () => {
+  const applyWalletFromBackend = (walletData) => {
+    const { saldoTotal, saldoReal: realCalc, bonoActivo: bonoCalc, movimientos: movs } =
+      calcularDesgloseBilletera(walletData);
+    setSaldo(saldoTotal);
+    setSaldoReal(realCalc);
+    setBonoActivo(bonoCalc);
+    setMovimientos(movs);
+    return { saldoTotal, saldoReal: realCalc, bonoActivo: bonoCalc, movimientos: movs };
+  };
+
+  const loadWalletAndHistory = async ({ strict = false } = {}) => {
+    if (!activeCedula) {
+      if (strict) {
+        throw new Error('No se encontró la cédula del usuario autenticado.');
+      }
+      return null;
+    }
+
+    if (strict) {
+      const walletData = await getWallet(activeCedula);
+      if (!walletData || walletData.saldo_disponible === undefined) {
+        throw new Error('PostgreSQL no devolvió información válida de la billetera.');
+      }
+      applyWalletFromBackend(walletData);
+
+      const [ticketsRes, rulesRes] = await Promise.allSettled([
+        getUserTickets(activeCedula),
+        getRules(),
+      ]);
+      if (ticketsRes.status === 'fulfilled' && Array.isArray(ticketsRes.value)) {
+        setTickets(ticketsRes.value);
+        setPuntosApuestaX(1200 + ticketsRes.value.length * 150);
+      }
+      if (rulesRes.status === 'fulfilled' && Array.isArray(rulesRes.value)) {
+        setReglas(rulesRes.value);
+      }
+      return walletData;
+    }
+
     try {
       const [walletRes, ticketsRes, rulesRes] = await Promise.allSettled([
         getWallet(activeCedula),
@@ -100,36 +102,26 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
         getRules(),
       ]);
 
-      if (walletRes.status === 'fulfilled' && walletRes.value) {
-        const totalDisp = Number(walletRes.value.saldo_disponible || 0);
-        const movs =
-          Array.isArray(walletRes.value.movimientos) && walletRes.value.movimientos.length > 0
-            ? walletRes.value.movimientos
-            : FALLBACK_MOVIMIENTOS;
-        setSaldo(totalDisp);
-        setMovimientos(movs);
-
-        const bonosAcreditados = movs
-          .filter((m) => String(m.nombre_tipo || '').toLowerCase().includes('bono'))
-          .reduce((acc, m) => acc + (Number(m.monto) || 0), 0);
-        setBonoActivo(Math.min(totalDisp, bonosAcreditados || 20000));
-      } else {
-        setMovimientos(FALLBACK_MOVIMIENTOS);
+      if (walletRes.status === 'fulfilled' && walletRes.value?.saldo_disponible !== undefined) {
+        applyWalletFromBackend(walletRes.value);
+      } else if (walletRes.status === 'rejected') {
+        setFeedback({
+          type: 'error',
+          text: 'No se pudo sincronizar el saldo desde PostgreSQL. Verifica la conexión con el servidor.',
+        });
       }
 
       if (ticketsRes.status === 'fulfilled' && Array.isArray(ticketsRes.value)) {
         setTickets(ticketsRes.value);
         setPuntosApuestaX(1200 + ticketsRes.value.length * 150);
-      } else {
-        setTickets(FALLBACK_TICKETS);
       }
 
       if (rulesRes.status === 'fulfilled' && Array.isArray(rulesRes.value)) {
         setReglas(rulesRes.value);
       }
+      return walletRes.status === 'fulfilled' ? walletRes.value : null;
     } catch {
-      setMovimientos(FALLBACK_MOVIMIENTOS);
-      setTickets(FALLBACK_TICKETS);
+      return null;
     }
   };
 
@@ -143,6 +135,11 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
     setFeedback(null);
     const numericAmount = Number(montoRecarga);
 
+    if (!activeCedula) {
+      setFeedback({ type: 'error', text: 'Debes iniciar sesión para realizar una recarga.' });
+      return;
+    }
+
     if (!numericAmount || numericAmount < 10000) {
       setFeedback({ type: 'error', text: 'El monto mínimo de recarga es de $10,000 COP.' });
       return;
@@ -155,16 +152,20 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
         monto: numericAmount,
         banco_origen: bancoPse,
       });
+
+      if (!order?.reference || !order?.signature || !order?.amountInCents) {
+        throw new Error('El servidor no devolvió una orden de pago válida.');
+      }
+
       setPaymentOrder(order);
-    } catch {
-      setPaymentOrder({
-        reference: `PSE-${Date.now().toString().slice(-8)}`,
-        amountInCents: numericAmount * 100,
-        currency: 'COP',
-        signature: `sha256_integrity_${Date.now()}`,
-        publicKey: 'pub_test_ApuestaXSandbox2026',
-        cedula_usuario: activeCedula,
-        banco_origen: bancoPse,
+    } catch (err) {
+      setPaymentOrder(null);
+      setFeedback({
+        type: 'error',
+        text:
+          err.response?.data?.message ||
+          err.message ||
+          'No se pudo preparar la orden de pago con el servidor.',
       });
     } finally {
       setProcessing(false);
@@ -213,54 +214,119 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
     setShowWompiModal(true);
   };
 
-  // Paso 2B: Confirmar transacción en el Webhook (/api/payments/webhook)
+  // Paso 2B: Confirmar transacción en PostgreSQL (/api/payments/webhook -> fallback idempotente /api/betting/wallet/recharge -> verificación getWallet)
   const handleConfirmGateway = async (status = 'APPROVED') => {
     if (!paymentOrder) return;
     setProcessing(true);
     setFeedback(null);
     setShowWompiModal(false);
+    const recargaCop = Math.round(Number(paymentOrder.amountInCents || 0) / 100);
+    const orderRef = paymentOrder.reference;
+    const orderBank = paymentOrder.banco_origen || bancoPse;
 
-    try {
-      const res = await confirmPaymentWebhook({
-        ...paymentOrder,
-        status,
-      });
-
-      if (status === 'APPROVED') {
-        if (res.nuevo_saldo !== undefined) setSaldo(Number(res.nuevo_saldo));
-        setFeedback({
-          type: 'success',
-          text: `Recarga aprobada (${paymentOrder.reference}) vía ${paymentOrder.banco_origen} por $${(
-            paymentOrder.amountInCents / 100
-          ).toLocaleString('es-CO')} COP.`,
+    if (status !== 'APPROVED') {
+      try {
+        await confirmPaymentWebhook({
+          ...paymentOrder,
+          cedula_usuario: activeCedula,
+          status,
         });
-        await loadWalletAndHistory();
-        onBalanceChange?.();
-      } else {
+      } catch {
+        // El registro de auditoría de pago rechazado no altera el saldo
+      } finally {
+        setPaymentOrder(null);
+        setProcessing(false);
         setFeedback({
           type: 'error',
-          text: `La transacción ${paymentOrder.reference} fue rechazada por la entidad bancaria.`,
+          text: `La transacción ${orderRef} fue rechazada por la entidad bancaria. No se modificó tu saldo.`,
         });
       }
-    } catch {
-      const recargaCop = paymentOrder.amountInCents / 100;
-      if (status === 'APPROVED') {
-        setSaldo((prev) => prev + recargaCop);
-        setMovimientos((prev) => [
-          {
-            fecha_hora: new Date().toISOString(),
-            nombre_tipo: 'Recarga PSE',
-            monto: recargaCop,
-            naturaleza_movimiento: 'Ingreso',
-          },
-          ...prev,
-        ]);
-        setFeedback({
-          type: 'success',
-          text: `Recarga aprobada (${paymentOrder.reference}) por $${recargaCop.toLocaleString('es-CO')} COP.`,
-        });
-        onBalanceChange?.();
+      return;
+    }
+
+    try {
+      if (!orderRef || !paymentOrder.signature || !recargaCop) {
+        throw new Error(
+          'La orden de pago no cuenta con referencia o firma de integridad válida.'
+        );
       }
+
+      let backendConfirmation = null;
+
+      try {
+        backendConfirmation = await confirmPaymentWebhook({
+          ...paymentOrder,
+          cedula_usuario: activeCedula,
+          status: 'APPROVED',
+        });
+      } catch (webhookErr) {
+        const httpStatus = webhookErr.response?.status;
+        // Solo usar fallback si existe evidencia válida de aprobación (status === 'APPROVED', reference y signature)
+        // y si el fallo no fue un rechazo de datos incompletos (400)
+        if (httpStatus === 400) {
+          throw webhookErr;
+        }
+
+        backendConfirmation = await rechargeWallet({
+          cedula_usuario: activeCedula,
+          monto: recargaCop,
+          nombre_tipo: 'Recarga PSE',
+          reference: orderRef,
+          referencia_externa: orderRef,
+          amountInCents: paymentOrder.amountInCents,
+          currency: paymentOrder.currency || 'COP',
+          signature: paymentOrder.signature,
+          status: 'APPROVED',
+          banco_origen: orderBank,
+        });
+      }
+
+      const confirmedByBackend =
+        backendConfirmation &&
+        (backendConfirmation.persisted === true ||
+          backendConfirmation.nuevo_saldo !== undefined);
+
+      if (!confirmedByBackend) {
+        throw new Error(
+          'El servidor no confirmó la persistencia de la recarga en PostgreSQL.'
+        );
+      }
+
+      // Consultar getWallet(cedula) como única fuente de verdad desde PostgreSQL
+      const freshWallet = await loadWalletAndHistory({ strict: true });
+
+      const persistedInPostgres =
+        Array.isArray(freshWallet?.movimientos) &&
+        freshWallet.movimientos.some(
+          (m) =>
+            m.referencia_externa === orderRef ||
+            (m.nombre_tipo === 'Recarga PSE' &&
+              Number(m.monto) === recargaCop &&
+              Math.abs(new Date(m.fecha_hora).getTime() - Date.now()) < 120000)
+        );
+
+      if (!persistedInPostgres) {
+        throw new Error(
+          `La recarga ${orderRef} no aparece registrada en historial_billetera de PostgreSQL.`
+        );
+      }
+
+      await onBalanceChange?.();
+
+      setFeedback({
+        type: 'success',
+        text: `Recarga aprobada (${orderRef}) vía ${orderBank} por $${recargaCop.toLocaleString(
+          'es-CO'
+        )} COP. Confirmada en PostgreSQL.`,
+      });
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text:
+          err.response?.data?.message ||
+          err.message ||
+          'Error al persistir la recarga en PostgreSQL. Tu saldo no fue modificado.',
+      });
     } finally {
       setPaymentOrder(null);
       setProcessing(false);
@@ -284,40 +350,21 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
 
     setProcessing(true);
     try {
-      const res = await withdrawWallet({
+      await withdrawWallet({
         cedula_usuario: activeCedula,
         monto: numericWithdraw,
       });
-      setSaldo(Number(res.nuevo_saldo));
+      await loadWalletAndHistory({ strict: true });
+      await onBalanceChange?.();
       setFeedback({
         type: 'success',
-        text: `Retiro bancario por $${numericWithdraw.toLocaleString('es-CO')} COP procesado exitosamente.`,
+        text: `Retiro bancario por $${numericWithdraw.toLocaleString('es-CO')} COP procesado exitosamente en PostgreSQL.`,
       });
-      await loadWalletAndHistory();
-      onBalanceChange?.();
     } catch (err) {
-      if (!err.response) {
-        setSaldo((prev) => prev - numericWithdraw);
-        setMovimientos((prev) => [
-          {
-            fecha_hora: new Date().toISOString(),
-            nombre_tipo: 'Retiro Bancario',
-            monto: numericWithdraw,
-            naturaleza_movimiento: 'Egreso',
-          },
-          ...prev,
-        ]);
-        setFeedback({
-          type: 'success',
-          text: `Retiro bancario por $${numericWithdraw.toLocaleString('es-CO')} COP procesado.`,
-        });
-        onBalanceChange?.();
-      } else {
-        setFeedback({
-          type: 'error',
-          text: err.response?.data?.message || 'No se pudo procesar el retiro.',
-        });
-      }
+      setFeedback({
+        type: 'error',
+        text: err.response?.data?.message || err.message || 'No se pudo procesar el retiro en PostgreSQL.',
+      });
     } finally {
       setProcessing(false);
     }
@@ -339,26 +386,29 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
       return;
     }
 
+    setProcessing(true);
     try {
-      const res = await rechargeWallet({
+      await rechargeWallet({
         cedula_usuario: activeCedula,
         monto: found.bono,
         nombre_tipo: 'Bono Promocional',
       });
-      if (res?.nuevo_saldo !== undefined) setSaldo(Number(res.nuevo_saldo));
-      await loadWalletAndHistory();
-      onBalanceChange?.();
-    } catch {
-      setSaldo((prev) => prev + found.bono);
-      setBonoActivo((prev) => prev + found.bono);
+      await loadWalletAndHistory({ strict: true });
+      await onBalanceChange?.();
+      setPuntosApuestaX((prev) => prev + 300);
+      setPromoCodeInput('');
+      setFeedback({
+        type: 'success',
+        text: `Promoción redimida y acreditada en PostgreSQL: ${found.desc} (+300 Puntos ApuestaX).`,
+      });
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: err.response?.data?.message || err.message || 'No se pudo acreditar el bono promocional en PostgreSQL.',
+      });
+    } finally {
+      setProcessing(false);
     }
-
-    setPuntosApuestaX((prev) => prev + 300);
-    setPromoCodeInput('');
-    setFeedback({
-      type: 'success',
-      text: `¡Promoción redimida y acreditada para apostar! ${found.desc} (+300 Puntos ApuestaX).`,
-    });
   };
 
   const handleExchangePoints = async () => {
@@ -366,54 +416,45 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
       setFeedback({ type: 'error', text: 'Necesitas al menos 500 Puntos ApuestaX para canjear por bono.' });
       return;
     }
-    setPuntosApuestaX((prev) => prev - 500);
 
+    setProcessing(true);
     try {
-      const res = await rechargeWallet({
+      await rechargeWallet({
         cedula_usuario: activeCedula,
         monto: 15000,
         nombre_tipo: 'Bono Promocional',
       });
-      if (res?.nuevo_saldo !== undefined) setSaldo(Number(res.nuevo_saldo));
-      await loadWalletAndHistory();
-      onBalanceChange?.();
-    } catch {
-      setSaldo((prev) => prev + 15000);
-      setBonoActivo((prev) => prev + 15000);
+      await loadWalletAndHistory({ strict: true });
+      await onBalanceChange?.();
+      setPuntosApuestaX((prev) => prev - 500);
+      setFeedback({
+        type: 'success',
+        text: 'Canje exitoso: convertiste 500 Puntos ApuestaX en $15.000 COP acreditados en PostgreSQL.',
+      });
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: err.response?.data?.message || err.message || 'No se pudo procesar el canje de puntos en PostgreSQL.',
+      });
+    } finally {
+      setProcessing(false);
     }
-
-    setFeedback({
-      type: 'success',
-      text: '¡Canje exitoso! Convertiste 500 Puntos ApuestaX en $15.000 COP disponibles para apostar.',
-    });
   };
 
   const handleSettleTicket = async (codigoTicket, resultado) => {
     setFeedback(null);
     try {
-      const res = await settleTicket(codigoTicket, resultado);
-      if (res.nuevo_saldo !== undefined) setSaldo(Number(res.nuevo_saldo));
+      await settleTicket(codigoTicket, resultado);
+      await loadWalletAndHistory({ strict: true });
+      await onBalanceChange?.();
       setFeedback({
         type: 'success',
         text: `El ticket ${codigoTicket} fue liquidado como ${resultado}.`,
       });
-      await loadWalletAndHistory();
-      onBalanceChange?.();
-    } catch {
-      setTickets((prev) =>
-        prev.map((tk) => {
-          if (tk.codigo_ticket === codigoTicket) {
-            if (resultado === 'Ganada') {
-              setSaldo((s) => s + Number(tk.posible_ganancia_total));
-            }
-            return { ...tk, estado_ticket: resultado };
-          }
-          return tk;
-        })
-      );
+    } catch (err) {
       setFeedback({
-        type: 'success',
-        text: `El ticket ${codigoTicket} fue liquidado como ${resultado}.`,
+        type: 'error',
+        text: err.response?.data?.message || err.message || `No se pudo liquidar el ticket ${codigoTicket}.`,
       });
     }
   };
@@ -421,27 +462,17 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
   const handleCancelTicket = async (codigoTicket) => {
     setFeedback(null);
     try {
-      const res = await cancelTicket(codigoTicket);
-      if (res.nuevo_saldo !== undefined) setSaldo(Number(res.nuevo_saldo));
+      await cancelTicket(codigoTicket);
+      await loadWalletAndHistory({ strict: true });
+      await onBalanceChange?.();
       setFeedback({
         type: 'success',
-        text: `El ticket ${codigoTicket} fue anulado y el saldo fue reembolsado.`,
+        text: `El ticket ${codigoTicket} fue anulado y el saldo fue reembolsado en PostgreSQL.`,
       });
-      await loadWalletAndHistory();
-      onBalanceChange?.();
-    } catch {
-      setTickets((prev) =>
-        prev.map((tk) => {
-          if (tk.codigo_ticket === codigoTicket) {
-            setSaldo((s) => s + Number(tk.monto_total));
-            return { ...tk, estado_ticket: 'Anulada' };
-          }
-          return tk;
-        })
-      );
+    } catch (err) {
       setFeedback({
-        type: 'success',
-        text: `El ticket ${codigoTicket} fue anulado y el saldo fue reembolsado.`,
+        type: 'error',
+        text: err.response?.data?.message || err.message || `No se pudo anular el ticket ${codigoTicket}.`,
       });
     }
   };
@@ -500,22 +531,31 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
           <p className="text-xs sm:text-sm text-slate-400 mt-1">{sectionMeta.subtitle}</p>
         </div>
 
-        <div className="grid grid-cols-2 sm:flex items-center gap-2.5 sm:gap-3 w-full md:w-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-3.5 sm:px-5 py-2.5 sm:py-3 shadow-lg">
+        <div className="grid grid-cols-3 sm:flex items-center gap-2 sm:gap-3 w-full md:w-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-3 sm:px-5 py-2.5 sm:py-3 shadow-lg">
             <span className="block text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400 font-semibold truncate">
-              Saldo Disponible
+              Saldo Total
             </span>
-            <span className="text-base sm:text-2xl font-black text-[#39FF14]">
+            <span className="text-sm sm:text-2xl font-black text-[#39FF14]">
               ${saldo.toLocaleString('es-CO')} <span className="text-[10px] sm:text-xs font-bold text-slate-300">COP</span>
             </span>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-3.5 sm:px-5 py-2.5 sm:py-3 shadow-lg">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-3 sm:px-5 py-2.5 sm:py-3 shadow-lg">
+            <span className="block text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400 font-semibold truncate">
+              Saldo Real
+            </span>
+            <span className="text-sm sm:text-2xl font-black text-white">
+              ${saldoReal.toLocaleString('es-CO')} <span className="text-[10px] sm:text-xs font-bold text-slate-300">COP</span>
+            </span>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-3 sm:px-5 py-2.5 sm:py-3 shadow-lg">
             <span className="block text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400 font-semibold truncate">
               Bono Activo
             </span>
-            <span className="text-base sm:text-2xl font-black text-white">
-              ${bonoActivo.toLocaleString('es-CO')} <span className="text-[10px] sm:text-xs font-bold text-[#39FF14]">COP</span>
+            <span className="text-sm sm:text-2xl font-black text-[#39FF14]">
+              ${bonoActivo.toLocaleString('es-CO')} <span className="text-[10px] sm:text-xs font-bold text-slate-300">COP</span>
             </span>
           </div>
         </div>
@@ -1083,10 +1123,16 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
                   {puntosApuestaX.toLocaleString('es-CO')} PTS
                 </strong>
               </div>
+              <div className="flex justify-between py-2 border-b border-slate-800/70">
+                <span className="text-slate-400">Saldo Real:</span>
+                <strong className="text-white font-mono">
+                  ${saldoReal.toLocaleString('es-CO')} COP
+                </strong>
+              </div>
               <div className="flex justify-between py-2">
                 <span className="text-slate-400">Saldo Total Disponible:</span>
                 <strong className="text-[#39FF14] font-mono">
-                  ${(saldo + bonoActivo).toLocaleString('es-CO')} COP
+                  ${saldo.toLocaleString('es-CO')} COP
                 </strong>
               </div>
             </div>

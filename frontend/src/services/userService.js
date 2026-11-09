@@ -39,11 +39,18 @@ export const login = async (credentials) => {
     if (response.data?.token) {
         localStorage.setItem('apuestax_jwt', response.data.token);
     }
+    const userPayload = response.data?.user || response.data;
+    if (userPayload?.cedula) {
+        localStorage.setItem('apuestax_user', JSON.stringify(userPayload));
+    }
     return response.data;
 };
 
 export const logoutSession = () => {
     localStorage.removeItem('apuestax_jwt');
+    localStorage.removeItem('apuestax_user');
+    localStorage.removeItem('apuestax_view');
+    localStorage.removeItem('apuestax_wallet_section');
 };
 
 export const register = async (user) => {
@@ -113,6 +120,63 @@ export const simulateLiveMatches = async () => {
 export const getWallet = async (cedula) => {
     const response = await apiClient.get(`betting/wallet/${cedula}`);
     return response.data;
+};
+
+/**
+ * Calcula de forma determinista Saldo Total, Saldo Real y Bono Activo
+ * exclusivamente a partir de la respuesta real de PostgreSQL (`getWallet`).
+ */
+export const calcularDesgloseBilletera = (walletData) => {
+    const totalDisponible = Number(walletData?.saldo_disponible) || 0;
+    const movimientos = Array.isArray(walletData?.movimientos)
+        ? walletData.movimientos
+        : [];
+
+    const cronologicos = [...movimientos].sort(
+        (a, b) =>
+            new Date(a.fecha_hora).getTime() -
+            new Date(b.fecha_hora).getTime()
+    );
+
+    let bonoAcumulado = 0;
+    let realAcumulado = 0;
+
+    for (const mov of cronologicos) {
+        const monto = Number(mov.monto) || 0;
+        if (monto <= 0) continue;
+
+        const tipo = String(mov.nombre_tipo || '');
+        const esBono = tipo.toLowerCase().includes('bono');
+        const esEgreso =
+            mov.naturaleza_movimiento === 'Egreso' ||
+            ['Apuesta Descontada', 'Retiro Bancario'].includes(tipo);
+
+        if (esEgreso) {
+            if (tipo === 'Retiro Bancario') {
+                const descReal = Math.min(realAcumulado, monto);
+                realAcumulado -= descReal;
+                bonoAcumulado = Math.max(0, bonoAcumulado - (monto - descReal));
+            } else {
+                const descBono = Math.min(bonoAcumulado, monto);
+                bonoAcumulado -= descBono;
+                realAcumulado = Math.max(0, realAcumulado - (monto - descBono));
+            }
+        } else if (esBono) {
+            bonoAcumulado += monto;
+        } else {
+            realAcumulado += monto;
+        }
+    }
+
+    const bonoActivo = Math.max(0, Math.min(totalDisponible, bonoAcumulado));
+    const saldoReal = Math.max(0, totalDisponible - bonoActivo);
+
+    return {
+        saldoTotal: totalDisponible,
+        saldoReal,
+        bonoActivo,
+        movimientos,
+    };
 };
 
 export const rechargeWallet = async (payload) => {
