@@ -118,6 +118,182 @@ export const loginWithGoogle = async () => {
     }
 };
 
+export const prepareGoogleRegistration = async () => {
+    let firebaseAuthenticated = false;
+
+    try {
+        // 1. Autenticar con Google
+        const credential = await signInWithPopup(
+            auth,
+            googleProvider
+        );
+
+        firebaseAuthenticated = true;
+
+        const firebaseUser = credential.user;
+
+        const idToken =
+            await firebaseUser.getIdToken();
+
+        // ============================================================
+        // 2. COMPROBAR INMEDIATAMENTE SI YA EXISTE EN APUESTAX
+        // ============================================================
+
+        try {
+            await apiClient.post(
+                'auth/google',
+                {
+                    idToken
+                }
+            );
+
+            /*
+             * Si /auth/google responde 200 significa que:
+             *
+             * - Firebase Token es válido
+             * - el correo existe en Azure SQL
+             * - el usuario está activo
+             *
+             * Por tanto NO debe volver a registrarse.
+             */
+            const alreadyRegisteredError =
+                new Error(
+                    'Esta cuenta de Google ya está registrada en ApuestaX. Usa "Continuar con Google" para iniciar sesión.'
+                );
+
+            alreadyRegisteredError.code =
+                'auth/apuestax-account-already-exists';
+
+            throw alreadyRegisteredError;
+
+        } catch (backendError) {
+
+            /*
+             * IMPORTANTE:
+             *
+             * 403 significa que Google autenticó correctamente,
+             * pero el correo NO existe como usuario activo
+             * de ApuestaX.
+             *
+             * Ese es precisamente el caso válido para continuar
+             * con el registro.
+             */
+            if (
+                backendError.response?.status !== 403
+            ) {
+                throw backendError;
+            }
+        }
+
+        // ============================================================
+        // 3. PREPARAR DATOS DEL NUEVO USUARIO
+        // ============================================================
+
+        const displayName =
+            firebaseUser.displayName || '';
+
+        const nameParts =
+            displayName
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean);
+
+        const nombre =
+            nameParts[0] || '';
+
+        const apellido =
+            nameParts
+                .slice(1)
+                .join(' ');
+
+        return {
+            idToken,
+
+            correo:
+                firebaseUser.email || '',
+
+            nombre,
+
+            apellido,
+
+            foto:
+                firebaseUser.photoURL || ''
+        };
+
+    } catch (error) {
+
+        /*
+         * Si descubrimos que ya existe o cualquier otra validación
+         * falla, cerramos la sesión temporal de Firebase.
+         */
+        if (firebaseAuthenticated) {
+            await signOut(auth)
+                .catch(() => { });
+        }
+
+        throw error;
+    }
+};
+
+
+export const registerWithGoogle = async (
+    googleRegistration
+) => {
+    try {
+        const response =
+            await apiClient.post(
+                'auth/register-google',
+                {
+                    idToken:
+                        googleRegistration.idToken,
+
+                    cedula:
+                        googleRegistration.cedula,
+
+                    nombre:
+                        googleRegistration.nombre,
+
+                    apellido:
+                        googleRegistration.apellido
+                }
+            );
+
+        if (!response.data?.token) {
+            throw new Error(
+                'El backend no devolvió una sesión válida.'
+            );
+        }
+
+        localStorage.setItem(
+            'apuestax_jwt',
+            response.data.token
+        );
+
+        const userPayload =
+            response.data?.user ||
+            response.data;
+
+        if (userPayload?.cedula) {
+            localStorage.setItem(
+                'apuestax_user',
+                JSON.stringify(userPayload)
+            );
+        }
+
+        return response.data;
+
+    } catch (error) {
+        /*
+         * Si el registro falla,
+         * cerramos la autenticación temporal Google.
+         */
+        await signOut(auth)
+            .catch(() => { });
+
+        throw error;
+    }
+};
+
 export const logoutSession = async () => {
     localStorage.removeItem('apuestax_jwt');
     localStorage.removeItem('apuestax_user');

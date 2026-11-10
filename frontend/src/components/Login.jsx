@@ -1,9 +1,43 @@
 import { useState } from 'react';
+
 import {
   login,
   loginWithGoogle,
+  logoutSession,
+  prepareGoogleRegistration,
   register,
+  registerWithGoogle,
 } from '../services/userService';
+
+function GoogleIcon() {
+  return (
+    <svg
+      className="h-5 w-5 shrink-0"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        fill="#4285F4"
+        d="M21.6 12.23c0-.71-.06-1.4-.2-2.07H12v3.91h5.37a4.59 4.59 0 01-1.99 3.01v2.54h3.22c1.89-1.74 3-4.3 3-7.39z"
+      />
+
+      <path
+        fill="#34A853"
+        d="M12 22c2.7 0 4.96-.9 6.61-2.38l-3.22-2.54c-.9.6-2.04.96-3.39.96-2.6 0-4.8-1.76-5.59-4.12H3.08v2.62A9.99 9.99 0 0012 22z"
+      />
+
+      <path
+        fill="#FBBC05"
+        d="M6.41 13.92A6.03 6.03 0 016.1 12c0-.67.12-1.31.31-1.92V7.46H3.08A10 10 0 002 12c0 1.61.38 3.14 1.08 4.54l3.33-2.62z"
+      />
+
+      <path
+        fill="#EA4335"
+        d="M12 5.96c1.47 0 2.79.51 3.83 1.5l2.87-2.87A9.63 9.63 0 0012 2a9.99 9.99 0 00-8.92 5.46l3.33 2.62C7.2 7.72 9.4 5.96 12 5.96z"
+      />
+    </svg>
+  );
+}
 
 function AuthPage({ onLoginSuccess }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -22,45 +56,119 @@ function AuthPage({ onLoginSuccess }) {
     contraseña: '',
   });
 
+  const [googleRegistration, setGoogleRegistration] =
+    useState(null);
+
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] =
+    useState(false);
 
-  const handleLoginChange = (e) => {
-    const { name, value } = e.target;
+  const isBusy = loading || googleLoading;
 
-    if (error) setError('');
+  // ============================================================
+  // CAMBIOS EN CAMPOS
+  // ============================================================
 
-    setLoginData((prev) => ({
-      ...prev,
+  const handleLoginChange = (event) => {
+    const { name, value } = event.target;
+
+    setError('');
+
+    setLoginData((previous) => ({
+      ...previous,
       [name]: value,
     }));
   };
 
-  const handleRegisterChange = (e) => {
-    const { name, value } = e.target;
+  const handleRegisterChange = (event) => {
+    const { name, value } = event.target;
 
-    if (error) setError('');
+    setError('');
 
-    setRegisterData((prev) => ({
-      ...prev,
+    setRegisterData((previous) => ({
+      ...previous,
       [name]: value,
     }));
   };
 
-  const switchMode = (loginMode) => {
+  const handleGoogleRegistrationChange = (event) => {
+    const { name, value } = event.target;
+
+    setError('');
+
+    setGoogleRegistration((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  };
+
+  // ============================================================
+  // CAMBIAR ENTRE LOGIN Y REGISTRO
+  // ============================================================
+
+  const switchMode = async (loginMode) => {
     setError('');
     setMessage('');
+
+    if (googleRegistration) {
+      await logoutSession().catch(() => { });
+      setGoogleRegistration(null);
+    }
+
     setIsLogin(loginMode);
+  };
+
+  // ============================================================
+  // MENSAJES DE FIREBASE
+  // ============================================================
+
+  const getGoogleErrorMessage = (
+    requestError,
+    fallbackMessage
+  ) => {
+    const code = requestError?.code;
+
+    if (
+      code ===
+      'auth/apuestax-account-already-exists'
+    ) {
+      return 'Esta cuenta de Google ya está registrada en ApuestaX. Ve a Iniciar Sesión y utiliza "Continuar con Google".';
+    }
+
+    if (code === 'auth/popup-closed-by-user') {
+      return 'Se cerró la ventana de Google antes de completar la operación.';
+    }
+
+    if (code === 'auth/popup-blocked') {
+      return 'El navegador bloqueó la ventana de Google. Permite ventanas emergentes para ApuestaX.';
+    }
+
+    if (code === 'auth/unauthorized-domain') {
+      return 'El dominio actual no está autorizado en Firebase Authentication.';
+    }
+
+    if (
+      code ===
+      'auth/account-exists-with-different-credential'
+    ) {
+      return 'Este correo ya está asociado a otro método de autenticación.';
+    }
+
+    return (
+      requestError?.response?.data?.message ||
+      requestError?.message ||
+      fallbackMessage
+    );
   };
 
   // ============================================================
   // LOGIN TRADICIONAL
   // ============================================================
 
-  const handleLoginSubmit = async (e) => {
-    e.preventDefault();
+  const handleLoginSubmit = async (event) => {
+    event.preventDefault();
 
     setLoading(true);
     setError('');
@@ -70,17 +178,11 @@ function AuthPage({ onLoginSuccess }) {
       const user = await login(loginData);
       onLoginSuccess(user);
     } catch (requestError) {
-      const backendMsg =
-        requestError.response?.data?.message;
-
-      const networkError = !requestError.response
-        ? 'No se pudo conectar con el servidor. Verifica que el backend esté encendido en el puerto 5000.'
-        : null;
-
       setError(
-        backendMsg ||
-        networkError ||
-        'Correo o contraseña incorrectos. Verifica tus credenciales.'
+        requestError.response?.data?.message ||
+        (!requestError.response
+          ? 'No se pudo conectar con el servidor.'
+          : 'Correo o contraseña incorrectos.')
       );
     } finally {
       setLoading(false);
@@ -100,46 +202,11 @@ function AuthPage({ onLoginSuccess }) {
       const user = await loginWithGoogle();
       onLoginSuccess(user);
     } catch (requestError) {
-      const firebaseCode = requestError?.code;
-
-      if (firebaseCode === 'auth/popup-closed-by-user') {
-        setError(
-          'Se cerró la ventana de Google antes de completar el inicio de sesión.'
-        );
-        return;
-      }
-
-      if (firebaseCode === 'auth/popup-blocked') {
-        setError(
-          'El navegador bloqueó la ventana de Google. Permite las ventanas emergentes de ApuestaX.'
-        );
-        return;
-      }
-
-      if (firebaseCode === 'auth/unauthorized-domain') {
-        setError(
-          'El dominio actual no está autorizado en Firebase Authentication.'
-        );
-        return;
-      }
-
-      if (
-        firebaseCode ===
-        'auth/account-exists-with-different-credential'
-      ) {
-        setError(
-          'Este correo ya está asociado a otro método de autenticación.'
-        );
-        return;
-      }
-
-      const backendMessage =
-        requestError.response?.data?.message;
-
       setError(
-        backendMessage ||
-        requestError.message ||
-        'No se pudo iniciar sesión con Google.'
+        getGoogleErrorMessage(
+          requestError,
+          'No se pudo iniciar sesión con Google.'
+        )
       );
     } finally {
       setGoogleLoading(false);
@@ -147,11 +214,11 @@ function AuthPage({ onLoginSuccess }) {
   };
 
   // ============================================================
-  // REGISTRO
+  // REGISTRO TRADICIONAL
   // ============================================================
 
-  const handleRegisterSubmit = async (e) => {
-    e.preventDefault();
+  const handleRegisterSubmit = async (event) => {
+    event.preventDefault();
 
     setLoading(true);
     setError('');
@@ -169,6 +236,15 @@ function AuthPage({ onLoginSuccess }) {
         contraseña: '',
       });
 
+      setRegisterData({
+        nombre: '',
+        apellido: '',
+        cedula: '',
+        nombre_rol: 'Usuario',
+        correo: '',
+        contraseña: '',
+      });
+
       setIsLogin(true);
     } catch (requestError) {
       setError(
@@ -179,6 +255,120 @@ function AuthPage({ onLoginSuccess }) {
       setLoading(false);
     }
   };
+
+  // ============================================================
+  // SELECCIONAR CUENTA GOOGLE PARA REGISTRO
+  // ============================================================
+
+  const handlePrepareGoogleRegistration = async () => {
+    setGoogleLoading(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const googleData =
+        await prepareGoogleRegistration();
+
+      setGoogleRegistration({
+        ...googleData,
+        cedula: '',
+      });
+    } catch (requestError) {
+      setError(
+        getGoogleErrorMessage(
+          requestError,
+          'No se pudo iniciar el registro con Google.'
+        )
+      );
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // ============================================================
+  // COMPLETAR REGISTRO GOOGLE
+  // ============================================================
+
+  const handleCompleteGoogleRegistration = async (
+    event
+  ) => {
+    event.preventDefault();
+
+    if (!googleRegistration) {
+      setError(
+        'Primero debes seleccionar una cuenta de Google.'
+      );
+      return;
+    }
+
+    const cedula =
+      googleRegistration.cedula?.trim();
+
+    const nombre =
+      googleRegistration.nombre?.trim();
+
+    const apellido =
+      googleRegistration.apellido?.trim();
+
+    if (!nombre) {
+      setError('El nombre es obligatorio.');
+      return;
+    }
+
+    if (!apellido) {
+      setError('El apellido es obligatorio.');
+      return;
+    }
+
+    if (!/^\d{5,20}$/.test(cedula || '')) {
+      setError(
+        'El documento debe contener entre 5 y 20 dígitos.'
+      );
+      return;
+    }
+
+    setGoogleLoading(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const user = await registerWithGoogle({
+        ...googleRegistration,
+        nombre,
+        apellido,
+        cedula,
+      });
+
+      setGoogleRegistration(null);
+      onLoginSuccess(user);
+    } catch (requestError) {
+      setError(
+        getGoogleErrorMessage(
+          requestError,
+          'No se pudo crear la cuenta con Google.'
+        )
+      );
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleCancelGoogleRegistration = async () => {
+    setGoogleLoading(true);
+
+    try {
+      await logoutSession().catch(() => { });
+
+      setGoogleRegistration(null);
+      setError('');
+      setMessage('');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const inputClass =
+    'w-full px-3 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all disabled:opacity-60';
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 font-sans antialiased selection:bg-[#39FF14] selection:text-slate-950">
@@ -205,9 +395,10 @@ function AuthPage({ onLoginSuccess }) {
           <button
             type="button"
             onClick={() => switchMode(true)}
-            className={`py-2.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${isLogin
-                ? 'bg-[#39FF14] text-slate-950 shadow-sm'
-                : 'text-slate-400 hover:text-white'
+            disabled={isBusy}
+            className={`py-2.5 rounded-xl text-xs font-extrabold transition cursor-pointer disabled:opacity-60 ${isLogin
+              ? 'bg-[#39FF14] text-slate-950 shadow-sm'
+              : 'text-slate-400 hover:text-white'
               }`}
           >
             Iniciar Sesión
@@ -216,9 +407,10 @@ function AuthPage({ onLoginSuccess }) {
           <button
             type="button"
             onClick={() => switchMode(false)}
-            className={`py-2.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${!isLogin
-                ? 'bg-[#39FF14] text-slate-950 shadow-sm'
-                : 'text-slate-400 hover:text-white'
+            disabled={isBusy}
+            className={`py-2.5 rounded-xl text-xs font-extrabold transition cursor-pointer disabled:opacity-60 ${!isLogin
+              ? 'bg-[#39FF14] text-slate-950 shadow-sm'
+              : 'text-slate-400 hover:text-white'
               }`}
           >
             Crear Cuenta
@@ -226,7 +418,7 @@ function AuthPage({ onLoginSuccess }) {
         </div>
 
         {/* ===================================================== */}
-        {/* LOGIN */}
+        {/* LOGIN (MITAD IZQUIERDA)                               */}
         {/* ===================================================== */}
         <div
           className={`relative md:absolute top-0 left-0 w-full md:w-1/2 h-auto md:h-full flex-col justify-center items-center px-5 sm:px-12 py-7 sm:py-8 z-10 ${isLogin ? 'flex' : 'hidden md:flex'
@@ -244,7 +436,7 @@ function AuthPage({ onLoginSuccess }) {
               </p>
             </div>
 
-            {/* ALERTAS */}
+            {/* ALERTAS LOGIN */}
             {message && isLogin && (
               <div
                 role="alert"
@@ -277,90 +469,47 @@ function AuthPage({ onLoginSuccess }) {
                   Correo electrónico
                 </label>
 
-                <div className="relative">
-                  <input
-                    type="email"
-                    name="correo"
-                    required
-                    value={loginData.correo}
-                    onChange={handleLoginChange}
-                    placeholder="ejemplo@apuestax.com"
-                    disabled={loading || googleLoading}
-                    className={`w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border ${error && isLogin
-                        ? 'border-red-500/80 focus:border-red-400 focus:ring-1 focus:ring-red-400'
-                        : 'border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14]'
-                      } outline-none transition-all duration-200 disabled:opacity-60`}
-                  />
-
-                  <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.206"
-                      />
-                    </svg>
-                  </div>
-                </div>
+                <input
+                  type="email"
+                  name="correo"
+                  required
+                  autoComplete="email"
+                  value={loginData.correo}
+                  onChange={handleLoginChange}
+                  placeholder="ejemplo@apuestax.com"
+                  disabled={isBusy}
+                  className={`w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border ${error && isLogin
+                    ? 'border-red-500/80 focus:border-red-400 focus:ring-1 focus:ring-red-400'
+                    : 'border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14]'
+                    } outline-none transition-all duration-200 disabled:opacity-60`}
+                />
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-medium text-slate-300">
-                    Contraseña
-                  </label>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Contraseña
+                </label>
 
-                  <a
-                    href="#recuperar"
-                    className="text-xs text-[#39FF14] hover:underline"
-                  >
-                    ¿Olvidaste tu contraseña?
-                  </a>
-                </div>
-
-                <div className="relative">
-                  <input
-                    type="password"
-                    name="contraseña"
-                    required
-                    value={loginData.contraseña}
-                    onChange={handleLoginChange}
-                    placeholder="••••••••"
-                    disabled={loading || googleLoading}
-                    className={`w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border ${error && isLogin
-                        ? 'border-red-500/80 focus:border-red-400 focus:ring-1 focus:ring-red-400'
-                        : 'border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14]'
-                      } outline-none transition-all duration-200 disabled:opacity-60`}
-                  />
-
-                  <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                      />
-                    </svg>
-                  </div>
-                </div>
+                <input
+                  type="password"
+                  name="contraseña"
+                  required
+                  autoComplete="current-password"
+                  value={loginData.contraseña}
+                  onChange={handleLoginChange}
+                  placeholder="••••••••"
+                  disabled={isBusy}
+                  className={`w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border ${error && isLogin
+                    ? 'border-red-500/80 focus:border-red-400 focus:ring-1 focus:ring-red-400'
+                    : 'border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14]'
+                    } outline-none transition-all duration-200 disabled:opacity-60`}
+                />
               </div>
 
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={loading || googleLoading}
+                  disabled={isBusy}
                   className="w-full py-3 bg-[#39FF14] text-slate-950 font-bold rounded-xl text-sm transition-all duration-200 hover:brightness-110 active:scale-[0.98] shadow-lg shadow-[#39FF14]/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Validando...' : 'Ingresar'}
@@ -383,42 +532,17 @@ function AuthPage({ onLoginSuccess }) {
             <button
               type="button"
               onClick={handleGoogleLogin}
-              disabled={loading || googleLoading}
+              disabled={isBusy}
               className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 font-bold text-sm transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-black/20"
             >
-              <svg
-                className="w-5 h-5 shrink-0"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  fill="#4285F4"
-                  d="M21.6 12.23c0-.71-.06-1.4-.2-2.07H12v3.91h5.37a4.59 4.59 0 01-1.99 3.01v2.54h3.22c1.89-1.74 3-4.3 3-7.39z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 22c2.7 0 4.96-.9 6.61-2.38l-3.22-2.54c-.9.6-2.04.96-3.39.96-2.6 0-4.8-1.76-5.59-4.12H3.08v2.62A9.99 9.99 0 0012 22z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M6.41 13.92A6.03 6.03 0 016.1 12c0-.67.12-1.31.31-1.92V7.46H3.08A10 10 0 002 12c0 1.61.38 3.14 1.08 4.54l3.33-2.62z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.96c1.47 0 2.79.51 3.83 1.5l2.87-2.87A9.63 9.63 0 0012 2a9.99 9.99 0 00-8.92 5.46l3.33 2.62C7.2 7.72 9.4 5.96 12 5.96z"
-                />
-              </svg>
+              <GoogleIcon />
 
               <span>
-                {googleLoading
+                {googleLoading && isLogin
                   ? 'Conectando con Google...'
                   : 'Continuar con Google'}
               </span>
             </button>
-
-            <p className="mt-3 text-center text-[11px] leading-relaxed text-slate-500">
-              El correo de Google debe estar registrado y activo en ApuestaX.
-            </p>
 
             {/* CAMBIO A REGISTRO MÓVIL */}
             <div className="md:hidden mt-6 text-center text-xs text-slate-400">
@@ -436,21 +560,23 @@ function AuthPage({ onLoginSuccess }) {
         </div>
 
         {/* ===================================================== */}
-        {/* REGISTRO */}
+        {/* REGISTRO (MITAD DERECHA)                              */}
         {/* ===================================================== */}
         <div
-          className={`relative md:absolute top-0 right-0 w-full md:w-1/2 h-auto md:h-fully-center items-center px-5 sm:px-10 py-6 z-10 overflow-y-auto ${!isLogin ? 'flex' : 'hidden md:flex'
+          className={`relative md:absolute top-0 right-0 w-full md:w-1/2 h-auto md:h-full flex-col justify-center items-center px-5 sm:px-10 py-6 z-10 overflow-y-auto ${!isLogin ? 'flex' : 'hidden md:flex'
             }`}
         >
           <div className="w-full max-w-md">
 
             <div className="text-center mb-5">
               <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                Crear Cuenta
+                {googleRegistration ? 'Completar Registro' : 'Crear Cuenta'}
               </h2>
 
               <p className="text-slate-400 text-xs mt-1">
-                Completa tus datos personales para registrarte
+                {googleRegistration
+                  ? 'Completa los datos requeridos por ApuestaX'
+                  : 'Completa tus datos personales o regístrate con Google'}
               </p>
             </div>
 
@@ -467,106 +593,239 @@ function AuthPage({ onLoginSuccess }) {
               </div>
             )}
 
-            <form
-              onSubmit={handleRegisterSubmit}
-              className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left"
-            >
-              {/* NOMBRE */}
-              <div>
-                <label className="block text-[11px] font-medium text-slate-300 mb-1">
-                  Nombre
-                </label>
+            {/* REGISTRO COMPLEMENTARIO CON GOOGLE */}
+            {googleRegistration ? (
+              <form
+                onSubmit={handleCompleteGoogleRegistration}
+                className="space-y-3 text-left"
+              >
+                <div className="rounded-2xl border border-[#39FF14]/30 bg-[#39FF14]/5 p-3.5">
+                  <div className="flex items-center gap-3">
+                    {googleRegistration.foto ? (
+                      <img
+                        src={googleRegistration.foto}
+                        alt="Perfil de Google"
+                        className="h-11 w-11 rounded-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white">
+                        <GoogleIcon />
+                      </div>
+                    )}
 
-                <input
-                  type="text"
-                  name="nombre"
-                  required
-                  placeholder="Nombre"
-                  value={registerData.nombre}
-                  onChange={handleRegisterChange}
-                  className="w-full px-3 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all"
-                />
-              </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-[#39FF14]">
+                        Cuenta Google verificada
+                      </p>
 
-              {/* APELLIDO */}
-              <div>
-                <label className="block text-[11px] font-medium text-slate-300 mb-1">
-                  Apellido
-                </label>
+                      <p className="truncate text-sm text-white">
+                        {googleRegistration.correo}
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-                <input
-                  type="text"
-                  name="apellido"
-                  required
-                  placeholder="Apellido"
-                  value={registerData.apellido}
-                  onChange={handleRegisterChange}
-                  className="w-full px-3 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all"
-                />
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                      Nombre
+                    </label>
 
-              {/* CORREO */}
-              <div>
-                <label className="block text-[11px] font-medium text-slate-300 mb-1">
-                  Correo electrónico
-                </label>
+                    <input
+                      type="text"
+                      name="nombre"
+                      required
+                      value={googleRegistration.nombre}
+                      onChange={handleGoogleRegistrationChange}
+                      disabled={googleLoading}
+                      className={inputClass}
+                    />
+                  </div>
 
-                <input
-                  type="email"
-                  name="correo"
-                  required
-                  placeholder="correo@ejemplo.com"
-                  value={registerData.correo}
-                  onChange={handleRegisterChange}
-                  className="w-full px-3 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all"
-                />
-              </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                      Apellido
+                    </label>
 
-              {/* DOCUMENTO */}
-              <div>
-                <label className="block text-[11px] font-medium text-slate-300 mb-1">
-                  Número documento
-                </label>
+                    <input
+                      type="text"
+                      name="apellido"
+                      required
+                      value={googleRegistration.apellido}
+                      onChange={handleGoogleRegistrationChange}
+                      disabled={googleLoading}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
 
-                <input
-                  type="text"
-                  name="cedula"
-                  required
-                  placeholder="1000000000"
-                  value={registerData.cedula}
-                  onChange={handleRegisterChange}
-                  className="w-full px-3 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all"
-                />
-              </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                    Número de documento
+                  </label>
 
-              {/* CONTRASEÑA */}
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-medium text-slate-300 mb-1">
-                  Contraseña
-                </label>
+                  <input
+                    type="text"
+                    name="cedula"
+                    required
+                    inputMode="numeric"
+                    value={googleRegistration.cedula}
+                    onChange={handleGoogleRegistrationChange}
+                    disabled={googleLoading}
+                    placeholder="1000000000"
+                    className={inputClass}
+                  />
+                </div>
 
-                <input
-                  type="password"
-                  name="contraseña"
-                  required
-                  placeholder="••••••••"
-                  value={registerData.contraseña}
-                  onChange={handleRegisterChange}
-                  className="w-full px-3 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all [color-scheme:dark]"
-                />
-              </div>
+                <div className="pt-2 space-y-2">
+                  <button
+                    type="submit"
+                    disabled={googleLoading}
+                    className="w-full py-3 bg-[#39FF14] text-slate-950 font-bold rounded-xl text-sm transition-all duration-200 hover:brightness-110 active:scale-[0.98] shadow-lg shadow-[#39FF14]/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {googleLoading ? 'Creando cuenta...' : 'Crear cuenta ApuestaX'}
+                  </button>
 
-              {/* BOTÓN REGISTRO */}
-              <div className="sm:col-span-2 pt-2">
-                <button
-                  type="submit"
-                  disabled={loading || googleLoading}
-                  className="w-full py-3 bg-[#39FF14] text-slate-950 font-bold rounded-xl text-sm transition-all duration-200 hover:brightness-110 active:scale-[0.98] shadow-lg shadow-[#39FF14]/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  <button
+                    type="button"
+                    onClick={handleCancelGoogleRegistration}
+                    disabled={googleLoading}
+                    className="w-full py-2.5 rounded-xl border border-slate-700 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition cursor-pointer disabled:opacity-60"
+                  >
+                    Cancelar registro con Google
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                {/* REGISTRO TRADICIONAL */}
+                <form
+                  onSubmit={handleRegisterSubmit}
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left"
                 >
-                  {loading ? 'Registrando...' : 'Registrar'}
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                      Nombre
+                    </label>
+
+                    <input
+                      type="text"
+                      name="nombre"
+                      required
+                      placeholder="Nombre"
+                      value={registerData.nombre}
+                      onChange={handleRegisterChange}
+                      disabled={isBusy}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                      Apellido
+                    </label>
+
+                    <input
+                      type="text"
+                      name="apellido"
+                      required
+                      placeholder="Apellido"
+                      value={registerData.apellido}
+                      onChange={handleRegisterChange}
+                      disabled={isBusy}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                      Correo electrónico
+                    </label>
+
+                    <input
+                      type="email"
+                      name="correo"
+                      required
+                      placeholder="correo@ejemplo.com"
+                      value={registerData.correo}
+                      onChange={handleRegisterChange}
+                      disabled={isBusy}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                      Número documento
+                    </label>
+
+                    <input
+                      type="text"
+                      name="cedula"
+                      required
+                      inputMode="numeric"
+                      placeholder="1000000000"
+                      value={registerData.cedula}
+                      onChange={handleRegisterChange}
+                      disabled={isBusy}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                      Contraseña
+                    </label>
+
+                    <input
+                      type="password"
+                      name="contraseña"
+                      required
+                      autoComplete="new-password"
+                      placeholder="••••••••"
+                      value={registerData.contraseña}
+                      onChange={handleRegisterChange}
+                      disabled={isBusy}
+                      className={`${inputClass} [color-scheme:dark]`}
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isBusy}
+                      className="w-full py-3 bg-[#39FF14] text-slate-950 font-bold rounded-xl text-sm transition-all duration-200 hover:brightness-110 active:scale-[0.98] shadow-lg shadow-[#39FF14]/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {loading ? 'Registrando...' : 'Registrar'}
+                    </button>
+                  </div>
+                </form>
+
+                <div className="my-4 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-slate-700" />
+                  <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    O
+                  </span>
+                  <div className="h-px flex-1 bg-slate-700" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handlePrepareGoogleRegistration}
+                  disabled={isBusy}
+                  className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 font-bold text-sm transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-black/20"
+                >
+                  <GoogleIcon />
+
+                  <span>
+                    {googleLoading && !isLogin
+                      ? 'Conectando con Google...'
+                      : 'Registrarse con Google'}
+                  </span>
                 </button>
-              </div>
-            </form>
+              </>
+            )}
 
             <div className="md:hidden mt-4 text-center text-xs text-slate-400">
               ¿Ya tienes cuenta?{' '}
@@ -583,7 +842,7 @@ function AuthPage({ onLoginSuccess }) {
         </div>
 
         {/* ===================================================== */}
-        {/* PANEL DESLIZANTE */}
+        {/* PANEL DESLIZANTE (CUBRE EL FORMULARIO INACTIVO)       */}
         {/* ===================================================== */}
         <div
           className={`hidden md:flex absolute top-0 left-0 w-1/2 h-full z-20 transition-transform duration-700 ease-in-out ${isLogin ? 'translate-x-full' : 'translate-x-0'
@@ -621,14 +880,15 @@ function AuthPage({ onLoginSuccess }) {
                   </h2>
 
                   <p className="text-slate-300 text-sm leading-relaxed">
-                    Regístrate con tus datos personales para acceder a la plataforma líder de pronósticos deportivos y cuotas exclusivas.
+                    Crea tu cuenta y accede a partidos, cuotas, apuestas y beneficios de ApuestaX.
                   </p>
 
                   <div className="pt-3">
                     <button
                       type="button"
                       onClick={() => switchMode(false)}
-                      className="px-8 py-3 rounded-xl font-bold text-sm text-[#39FF14] border-2 border-[#39FF14] hover:bg-[#39FF14] hover:text-slate-950 transition-all duration-300 hover:shadow-lg hover:shadow-[#39FF14]/25 active:scale-95 cursor-pointer"
+                      disabled={isBusy}
+                      className="px-8 py-3 rounded-xl font-bold text-sm text-[#39FF14] border-2 border-[#39FF14] hover:bg-[#39FF14] hover:text-slate-950 transition-all duration-300 hover:shadow-lg hover:shadow-[#39FF14]/25 active:scale-95 cursor-pointer disabled:opacity-60"
                     >
                       Registrarse
                     </button>
@@ -658,19 +918,19 @@ function AuthPage({ onLoginSuccess }) {
                   </h2>
 
                   <p className="text-slate-300 text-sm leading-relaxed">
-                    Para mantenerte conectado con nosotros, inicia sesión con tu correo electrónico, contraseña o cuenta de Google.
+                    Inicia sesión con tu correo y contraseña o utiliza tu cuenta de Google.
                   </p>
 
                   <div className="pt-3">
                     <button
                       type="button"
                       onClick={() => switchMode(true)}
-                      className="px-8 py-3 rounded-xl font-bold text-sm text-[#39FF14] border-2 border-[#39FF14] hover:bg-[#39FF14] hover:text-slate-950 transition-all duration-300 hover:shadow-lg hover:shadow-[#39FF14]/25 active:scale-95 cursor-pointer"
+                      disabled={isBusy}
+                      className="px-8 py-3 rounded-xl font-bold text-sm text-[#39FF14] border-2 border-[#39FF14] hover:bg-[#39FF14] hover:text-slate-950 transition-all duration-300 hover:shadow-lg hover:shadow-[#39FF14]/25 active:scale-95 cursor-pointer disabled:opacity-60"
                     >
                       Iniciar Sesión
                     </button>
                   </div>
-
                 </div>
               )}
 

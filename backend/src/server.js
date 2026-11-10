@@ -1199,6 +1199,423 @@ app.post('/api/auth/google', async (req, res) => {
     }
 });
 
+// =====================================================================
+// 3.4.2 REGISTRAR USUARIO CON GOOGLE
+// POST /api/auth/register-google
+// =====================================================================
+
+app.post('/api/auth/register-google', async (req, res) => {
+    const {
+        idToken,
+        cedula,
+        nombre,
+        apellido
+    } = req.body;
+
+    if (!idToken) {
+        return res.status(400).json({
+            message:
+                'El token de Google es obligatorio.'
+        });
+    }
+
+    if (!cedula?.trim()) {
+        return res.status(400).json({
+            message:
+                'El número de documento es obligatorio.'
+        });
+    }
+
+    try {
+        // ============================================================
+        // 1. VERIFICAR IDENTIDAD CON FIREBASE
+        // ============================================================
+
+        const decodedToken =
+            await authFirebase.verifyIdToken(idToken);
+
+        const correo =
+            decodedToken.email
+                ?.trim()
+                .toLowerCase();
+
+        if (!correo) {
+            return res.status(401).json({
+                message:
+                    'Google no proporcionó un correo válido.'
+            });
+        }
+
+        if (!decodedToken.email_verified) {
+            return res.status(401).json({
+                message:
+                    'El correo de Google no está verificado.'
+            });
+        }
+
+        // ============================================================
+        // 2. VALIDAR DATOS
+        // ============================================================
+
+        const nombreFinal =
+            String(nombre || '')
+                .trim();
+
+        const apellidoFinal =
+            String(apellido || '')
+                .trim();
+
+        if (!nombreFinal || !apellidoFinal) {
+            return res.status(400).json({
+                message:
+                    'Nombre y apellido son obligatorios.'
+            });
+        }
+
+        const pool =
+            await sqlServerPool;
+
+        if (!pool) {
+            throw new Error(
+                'SQL Server no disponible'
+            );
+        }
+
+        // ============================================================
+        // 3. COMPROBAR QUE NO EXISTA
+        // ============================================================
+
+        const existingUser =
+            await pool
+                .request()
+
+                .input(
+                    'cedula',
+                    sql.VarChar(20),
+                    cedula.trim()
+                )
+
+                .input(
+                    'correo',
+                    sql.VarChar(100),
+                    correo
+                )
+
+                .query(`
+                    SELECT
+                        cedula,
+                        correo
+                    FROM usuario
+                    WHERE cedula = @cedula
+                       OR LOWER(correo) = LOWER(@correo)
+                `);
+
+        if (
+            existingUser.recordset.length > 0
+        ) {
+            return res.status(409).json({
+                message:
+                    'Ya existe una cuenta de ApuestaX con este correo o número de documento.'
+            });
+        }
+
+        // ============================================================
+        // 4. CREAR EL USUARIO
+        // ============================================================
+
+        /*
+         * IMPORTANTE:
+         * El usuario registrado desde Google SIEMPRE
+         * se crea con rol Usuario.
+         *
+         * Nunca aceptamos nombre_rol desde el navegador.
+         */
+
+        const nombreRol = 'Usuario';
+
+        /*
+         * La tabla actual exige contraseña.
+         *
+         * Creamos un valor aleatorio imposible de conocer desde
+         * el cliente. El usuario utilizará Google para autenticarse.
+         */
+
+        const passwordAleatorio =
+            require('crypto')
+                .randomBytes(48)
+                .toString('hex');
+
+        const passwordHash =
+            await bcrypt.hash(
+                passwordAleatorio,
+                10
+            );
+
+        await pool
+            .request()
+
+            .input(
+                'cedula',
+                sql.VarChar(20),
+                cedula.trim()
+            )
+
+            .input(
+                'nombre_rol',
+                sql.VarChar(50),
+                nombreRol
+            )
+
+            .input(
+                'nombre',
+                sql.VarChar(50),
+                nombreFinal
+            )
+
+            .input(
+                'apellido',
+                sql.VarChar(50),
+                apellidoFinal
+            )
+
+            .input(
+                'correo',
+                sql.VarChar(100),
+                correo
+            )
+
+            .input(
+                'contraseña',
+                sql.VarChar(255),
+                passwordHash
+            )
+
+            .input(
+                'estado',
+                sql.VarChar(20),
+                'Activo'
+            )
+
+            .query(`
+                INSERT INTO usuario (
+                    cedula,
+                    nombre_rol,
+                    nombre,
+                    apellido,
+                    correo,
+                    [contraseña],
+                    estado
+                )
+                VALUES (
+                    @cedula,
+                    @nombre_rol,
+                    @nombre,
+                    @apellido,
+                    @correo,
+                    @contraseña,
+                    @estado
+                )
+            `);
+
+        // ============================================================
+        // 5. CREAR BILLETERA
+        // ============================================================
+
+        const bonoInicial = 20000;
+
+        try {
+            await pgPool.query(
+                `
+                INSERT INTO billetera (
+                    cedula_usuario,
+                    saldo_disponible
+                )
+                VALUES ($1, $2)
+                ON CONFLICT (
+                    cedula_usuario
+                )
+                DO NOTHING
+                `,
+                [
+                    cedula.trim(),
+                    bonoInicial
+                ]
+            );
+
+            await pgPool.query(`
+                INSERT INTO tipo_transaccion (
+                    nombre_tipo,
+                    naturaleza_movimiento
+                )
+                VALUES (
+                    'Bono Bienvenida',
+                    'Ingreso'
+                )
+                ON CONFLICT (
+                    nombre_tipo
+                )
+                DO NOTHING
+            `);
+
+            await pgPool.query(
+                `
+                INSERT INTO historial_billetera (
+                    cedula_usuario,
+                    nombre_tipo,
+                    monto,
+                    referencia_externa
+                )
+                VALUES (
+                    $1,
+                    'Bono Bienvenida',
+                    $2,
+                    $3
+                )
+                ON CONFLICT (
+                    referencia_externa
+                )
+                WHERE referencia_externa
+                      IS NOT NULL
+                DO NOTHING
+                `,
+                [
+                    cedula.trim(),
+                    bonoInicial,
+                    `BIENVENIDA-${cedula.trim()}`
+                ]
+            );
+
+        } catch (pgError) {
+            console.error(
+                '[PostgreSQL] Error creando billetera Google:',
+                pgError.message
+            );
+        }
+
+        // ============================================================
+        // 6. PREPARAR SESIÓN APUESTAX
+        // ============================================================
+
+        const loggedUser = {
+            cedula:
+                cedula.trim(),
+
+            nombre_rol:
+                nombreRol,
+
+            nombre:
+                nombreFinal,
+
+            apellido:
+                apellidoFinal,
+
+            correo,
+
+            estado:
+                'Activo'
+        };
+
+        const permisosResult =
+            await pool
+                .request()
+
+                .input(
+                    'nombre_rol',
+                    sql.VarChar(50),
+                    nombreRol
+                )
+
+                .query(`
+                    SELECT
+                        pr.nombre_modulo,
+                        ms.ruta_frontend
+                    FROM permiso_rol pr
+                    INNER JOIN modulo_sistema ms
+                        ON pr.nombre_modulo =
+                           ms.nombre_modulo
+                    WHERE pr.nombre_rol =
+                          @nombre_rol
+                `);
+
+        const token =
+            generarToken(loggedUser);
+
+        // ============================================================
+        // 7. AUDITORÍA
+        // ============================================================
+
+        if (
+            mongoose.connection.readyState === 1
+        ) {
+            await LoginAudit.create({
+                cedula_usuario:
+                    loggedUser.cedula,
+
+                ip_conexion:
+                    req.ip ||
+                    '127.0.0.1',
+
+                estado_intento:
+                    'Exitoso',
+
+                tipo_evento:
+                    'REGISTER_GOOGLE_SUCCESS'
+
+            }).catch((auditError) => {
+                console.error(
+                    '[MongoDB] Error registrando REGISTER_GOOGLE_SUCCESS:',
+                    auditError.message
+                );
+            });
+        }
+
+        // ============================================================
+        // 8. RESPUESTA
+        // ============================================================
+
+        return res
+            .status(201)
+            .json({
+                ...loggedUser,
+
+                token,
+
+                permisos:
+                    permisosResult.recordset,
+
+                proveedor_autenticacion:
+                    'Google',
+
+                bono_bienvenida:
+                    bonoInicial,
+
+                message:
+                    'Cuenta creada correctamente con Google.'
+            });
+
+    } catch (error) {
+        console.error(
+            '[Auth/Google/Register] Error:',
+            error.message
+        );
+
+        if (
+            error.number === 2627 ||
+            error.number === 2601
+        ) {
+            return res.status(409).json({
+                message:
+                    'La cédula o el correo ya están registrados.'
+            });
+        }
+
+        return res.status(500).json({
+            message:
+                'No se pudo crear la cuenta con Google.'
+        });
+    }
+});
+
 
 // =====================================================================
 // 3.5 REGISTRAR USUARIO
