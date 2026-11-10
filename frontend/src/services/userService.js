@@ -1,5 +1,15 @@
 import axios from 'axios';
 
+import {
+    signInWithPopup,
+    signOut
+} from 'firebase/auth';
+
+import {
+    auth,
+    googleProvider
+} from '../config/firebase';
+
 const API_URL =
     import.meta.env.VITE_API_URL || 'http://localhost:5000/api/';
 
@@ -46,11 +56,76 @@ export const login = async (credentials) => {
     return response.data;
 };
 
-export const logoutSession = () => {
+export const loginWithGoogle = async () => {
+    let firebaseAuthenticated = false;
+
+    try {
+        // 1. Firebase abre el selector de cuentas Google
+        const credential = await signInWithPopup(
+            auth,
+            googleProvider
+        );
+
+        firebaseAuthenticated = true;
+
+        // 2. Firebase genera un ID Token firmado
+        const idToken =
+            await credential.user.getIdToken();
+
+        // 3. El backend valida el token con Firebase Admin
+        // y busca el correo en SQL Server.
+        const response = await apiClient.post(
+            'auth/google',
+            {
+                idToken
+            }
+        );
+
+        if (!response.data?.token) {
+            throw new Error(
+                'El backend no devolvió una sesión válida de ApuestaX.'
+            );
+        }
+
+        // 4. Guardar JWT propio de ApuestaX
+        localStorage.setItem(
+            'apuestax_jwt',
+            response.data.token
+        );
+
+        // 5. Guardar usuario para recuperación tras F5
+        const userPayload =
+            response.data?.user ||
+            response.data;
+
+        if (userPayload?.cedula) {
+            localStorage.setItem(
+                'apuestax_user',
+                JSON.stringify(userPayload)
+            );
+        }
+
+        return response.data;
+
+    } catch (error) {
+        // Google pudo autenticar correctamente pero ApuestaX
+        // pudo rechazar el usuario porque no existe en SQL Server.
+        if (firebaseAuthenticated) {
+            await signOut(auth).catch(() => { });
+        }
+
+        throw error;
+    }
+};
+
+export const logoutSession = async () => {
     localStorage.removeItem('apuestax_jwt');
     localStorage.removeItem('apuestax_user');
     localStorage.removeItem('apuestax_view');
     localStorage.removeItem('apuestax_wallet_section');
+
+    // También cerrar la sesión Firebase si entró con Google.
+    await signOut(auth).catch(() => { });
 };
 
 export const register = async (user) => {

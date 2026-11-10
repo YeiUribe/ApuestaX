@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { login, register } from '../services/userService';
+import {
+  login,
+  loginWithGoogle,
+  register,
+} from '../services/userService';
 
-/**
- * AuthPage - Componente de Autenticación para Apuestax
- * 
- * Implementa un diseño Dark Mode de alta gama con un panel deslizante (Sliding Overlay)
- * que alterna suavemente entre el formulario de Inicio de Sesión y el de Registro.
- */
 function AuthPage({ onLoginSuccess }) {
   const [isLogin, setIsLogin] = useState(true);
 
-  // Estados de formularios
-  const [loginData, setLoginData] = useState({ correo: '', contraseña: '' });
+  const [loginData, setLoginData] = useState({
+    correo: '',
+    contraseña: '',
+  });
 
   const [registerData, setRegisterData] = useState({
     nombre: '',
@@ -21,20 +21,32 @@ function AuthPage({ onLoginSuccess }) {
     correo: '',
     contraseña: '',
   });
+
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleLoginChange = (e) => {
     const { name, value } = e.target;
+
     if (error) setError('');
-    setLoginData((prev) => ({ ...prev, [name]: value }));
+
+    setLoginData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleRegisterChange = (e) => {
     const { name, value } = e.target;
+
     if (error) setError('');
-    setRegisterData((prev) => ({ ...prev, [name]: value }));
+
+    setRegisterData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const switchMode = (loginMode) => {
@@ -43,41 +55,126 @@ function AuthPage({ onLoginSuccess }) {
     setIsLogin(loginMode);
   };
 
+  // ============================================================
+  // LOGIN TRADICIONAL
+  // ============================================================
+
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
+
     setLoading(true);
     setError('');
     setMessage('');
+
     try {
       const user = await login(loginData);
       onLoginSuccess(user);
     } catch (requestError) {
-      const backendMsg = requestError.response?.data?.message;
+      const backendMsg =
+        requestError.response?.data?.message;
+
       const networkError = !requestError.response
         ? 'No se pudo conectar con el servidor. Verifica que el backend esté encendido en el puerto 5000.'
         : null;
+
       setError(
         backendMsg ||
-          networkError ||
-          'Correo o contraseña incorrectos. Verifica tus credenciales.'
+        networkError ||
+        'Correo o contraseña incorrectos. Verifica tus credenciales.'
       );
     } finally {
       setLoading(false);
     }
   };
 
+  // ============================================================
+  // LOGIN CON GOOGLE
+  // ============================================================
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const user = await loginWithGoogle();
+      onLoginSuccess(user);
+    } catch (requestError) {
+      const firebaseCode = requestError?.code;
+
+      if (firebaseCode === 'auth/popup-closed-by-user') {
+        setError(
+          'Se cerró la ventana de Google antes de completar el inicio de sesión.'
+        );
+        return;
+      }
+
+      if (firebaseCode === 'auth/popup-blocked') {
+        setError(
+          'El navegador bloqueó la ventana de Google. Permite las ventanas emergentes de ApuestaX.'
+        );
+        return;
+      }
+
+      if (firebaseCode === 'auth/unauthorized-domain') {
+        setError(
+          'El dominio actual no está autorizado en Firebase Authentication.'
+        );
+        return;
+      }
+
+      if (
+        firebaseCode ===
+        'auth/account-exists-with-different-credential'
+      ) {
+        setError(
+          'Este correo ya está asociado a otro método de autenticación.'
+        );
+        return;
+      }
+
+      const backendMessage =
+        requestError.response?.data?.message;
+
+      setError(
+        backendMessage ||
+        requestError.message ||
+        'No se pudo iniciar sesión con Google.'
+      );
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // ============================================================
+  // REGISTRO
+  // ============================================================
+
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
+
     setLoading(true);
     setError('');
     setMessage('');
+
     try {
       await register(registerData);
-      setMessage('Usuario registrado correctamente. Ya puedes iniciar sesión.');
-      setLoginData({ correo: registerData.correo, contraseña: '' });
+
+      setMessage(
+        'Usuario registrado correctamente. Ya puedes iniciar sesión.'
+      );
+
+      setLoginData({
+        correo: registerData.correo,
+        contraseña: '',
+      });
+
       setIsLogin(true);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'No se pudo registrar el usuario.');
+      setError(
+        requestError.response?.data?.message ||
+        'No se pudo registrar el usuario.'
+      );
     } finally {
       setLoading(false);
     }
@@ -85,93 +182,101 @@ function AuthPage({ onLoginSuccess }) {
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 font-sans antialiased selection:bg-[#39FF14] selection:text-slate-950">
-      {/* Brand Header */}
+
+      {/* MARCA */}
       <div className="flex items-center gap-2 mb-6 sm:mb-8">
         <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center shadow-md">
-          <span className="text-[#39FF14] font-black text-xl tracking-tighter">A</span>
+          <span className="text-[#39FF14] font-black text-xl tracking-tighter">
+            A
+          </span>
         </div>
+
         <span className="text-2xl font-extrabold tracking-wider text-white">
-          APUESTA<span className="text-[#39FF14]">X</span>
+          APUESTA
+          <span className="text-[#39FF14]">X</span>
         </span>
       </div>
 
-      {/* Contenedor Principal de Autenticación (Fluido en Móvil y 2 Paneles en Escritorio) */}
+      {/* CONTENEDOR PRINCIPAL */}
       <div className="relative w-full max-w-5xl min-h-0 h-auto md:h-[680px] bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-800/80 shadow-2xl shadow-black/80 overflow-hidden">
-        {/* Selector de Pestaña Superior exclusivo para Celulares */}
+
+        {/* SELECTOR MÓVIL */}
         <div className="md:hidden grid grid-cols-2 p-2 bg-slate-950/70 border-b border-slate-800 gap-1.5">
           <button
             type="button"
             onClick={() => switchMode(true)}
-            className={`py-2.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
-              isLogin
+            className={`py-2.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${isLogin
                 ? 'bg-[#39FF14] text-slate-950 shadow-sm'
                 : 'text-slate-400 hover:text-white'
-            }`}
+              }`}
           >
             Iniciar Sesión
           </button>
+
           <button
             type="button"
             onClick={() => switchMode(false)}
-            className={`py-2.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
-              !isLogin
+            className={`py-2.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${!isLogin
                 ? 'bg-[#39FF14] text-slate-950 shadow-sm'
                 : 'text-slate-400 hover:text-white'
-            }`}
+              }`}
           >
             Crear Cuenta
           </button>
         </div>
 
-        {/* ========================================================================= */}
-        {/* 1. FORMULARIO DE LOGIN (Lado Izquierdo) */}
-        {/* ========================================================================= */}
+        {/* ===================================================== */}
+        {/* LOGIN */}
+        {/* ===================================================== */}
         <div
-          className={`relative md:absolute top-0 left-0 w-full md:w-1/2 h-auto md:h-full flex-col justify-center items-center px-5 sm:px-12 py-7 sm:py-8 z-10 ${
-            isLogin ? 'flex' : 'hidden md:flex'
-          }`}
+          className={`relative md:absolute top-0 left-0 w-full md:w-1/2 h-auto md:h-full flex-col justify-center items-center px-5 sm:px-12 py-7 sm:py-8 z-10 ${isLogin ? 'flex' : 'hidden md:flex'
+            }`}
         >
           <div className="w-full max-w-sm">
-            {/* Header del Login */}
+
             <div className="text-center mb-6">
               <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
                 Iniciar Sesión
               </h2>
+
               <p className="text-slate-400 text-sm mt-1">
                 Ingresa a tu cuenta para continuar
               </p>
             </div>
 
-            {/* Alertas visibles de Error o Éxito en Inicio de Sesión */}
+            {/* ALERTAS */}
             {message && isLogin && (
               <div
                 role="alert"
-                className="mb-4 p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs sm:text-sm font-medium flex items-start gap-2.5 shadow-lg shadow-emerald-950/30"
+                className="mb-4 p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs sm:text-sm font-medium shadow-lg shadow-emerald-950/30"
               >
-                <span>{message}</span>
+                {message}
               </div>
             )}
 
             {error && isLogin && (
               <div
                 role="alert"
-                className="mb-4 p-3.5 rounded-xl bg-red-500/15 border border-red-500/50 text-red-200 text-xs sm:text-sm font-medium flex items-start gap-2.5 shadow-lg shadow-red-950/40"
+                className="mb-4 p-3.5 rounded-xl bg-red-500/15 border border-red-500/50 text-red-200 text-xs sm:text-sm font-medium shadow-lg shadow-red-950/40"
               >
-                <div>
-                  <strong className="block text-red-300 font-bold mb-0.5">
-                    Error de autenticación
-                  </strong>
-                  <span>{error}</span>
-                </div>
+                <strong className="block text-red-300 font-bold mb-0.5">
+                  Error de autenticación
+                </strong>
+
+                <span>{error}</span>
               </div>
             )}
 
-            {/* Formulario */}
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
+            {/* LOGIN CORREO + CONTRASEÑA */}
+            <form
+              onSubmit={handleLoginSubmit}
+              className="space-y-4"
+            >
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
                   Correo electrónico
                 </label>
+
                 <div className="relative">
                   <input
                     type="email"
@@ -180,15 +285,26 @@ function AuthPage({ onLoginSuccess }) {
                     value={loginData.correo}
                     onChange={handleLoginChange}
                     placeholder="ejemplo@apuestax.com"
-                    className={`w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border ${
-                      error && isLogin
+                    disabled={loading || googleLoading}
+                    className={`w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border ${error && isLogin
                         ? 'border-red-500/80 focus:border-red-400 focus:ring-1 focus:ring-red-400'
                         : 'border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14]'
-                    } outline-none transition-all duration-200`}
+                      } outline-none transition-all duration-200 disabled:opacity-60`}
                   />
+
                   <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.206" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.206"
+                      />
                     </svg>
                   </div>
                 </div>
@@ -199,10 +315,15 @@ function AuthPage({ onLoginSuccess }) {
                   <label className="block text-xs font-medium text-slate-300">
                     Contraseña
                   </label>
-                  <a href="#recuperar" className="text-xs text-[#39FF14] hover:underline">
+
+                  <a
+                    href="#recuperar"
+                    className="text-xs text-[#39FF14] hover:underline"
+                  >
                     ¿Olvidaste tu contraseña?
                   </a>
                 </div>
+
                 <div className="relative">
                   <input
                     type="password"
@@ -211,15 +332,26 @@ function AuthPage({ onLoginSuccess }) {
                     value={loginData.contraseña}
                     onChange={handleLoginChange}
                     placeholder="••••••••"
-                    className={`w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border ${
-                      error && isLogin
+                    disabled={loading || googleLoading}
+                    className={`w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border ${error && isLogin
                         ? 'border-red-500/80 focus:border-red-400 focus:ring-1 focus:ring-red-400'
                         : 'border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14]'
-                    } outline-none transition-all duration-200`}
+                      } outline-none transition-all duration-200 disabled:opacity-60`}
                   />
+
                   <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                      />
                     </svg>
                   </div>
                 </div>
@@ -228,16 +360,70 @@ function AuthPage({ onLoginSuccess }) {
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-3 bg-[#39FF14] text-slate-950 font-bold rounded-xl text-sm transition-all duration-200 hover:brightness-110 active:scale-[0.98] shadow-lg shadow-[#39FF14]/20 cursor-pointer"
+                  disabled={loading || googleLoading}
+                  className="w-full py-3 bg-[#39FF14] text-slate-950 font-bold rounded-xl text-sm transition-all duration-200 hover:brightness-110 active:scale-[0.98] shadow-lg shadow-[#39FF14]/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Validando...' : 'Ingresar'}
                 </button>
               </div>
             </form>
 
-            {/* Alternativa móvil para cambiar a registro */}
+            {/* SEPARADOR GOOGLE */}
+            <div className="my-5 flex items-center gap-3">
+              <div className="h-px flex-1 bg-slate-700" />
+
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap">
+                O continúa con
+              </span>
+
+              <div className="h-px flex-1 bg-slate-700" />
+            </div>
+
+            {/* GOOGLE */}
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={loading || googleLoading}
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 font-bold text-sm transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-black/20"
+            >
+              <svg
+                className="w-5 h-5 shrink-0"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  fill="#4285F4"
+                  d="M21.6 12.23c0-.71-.06-1.4-.2-2.07H12v3.91h5.37a4.59 4.59 0 01-1.99 3.01v2.54h3.22c1.89-1.74 3-4.3 3-7.39z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 22c2.7 0 4.96-.9 6.61-2.38l-3.22-2.54c-.9.6-2.04.96-3.39.96-2.6 0-4.8-1.76-5.59-4.12H3.08v2.62A9.99 9.99 0 0012 22z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M6.41 13.92A6.03 6.03 0 016.1 12c0-.67.12-1.31.31-1.92V7.46H3.08A10 10 0 002 12c0 1.61.38 3.14 1.08 4.54l3.33-2.62z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.96c1.47 0 2.79.51 3.83 1.5l2.87-2.87A9.63 9.63 0 0012 2a9.99 9.99 0 00-8.92 5.46l3.33 2.62C7.2 7.72 9.4 5.96 12 5.96z"
+                />
+              </svg>
+
+              <span>
+                {googleLoading
+                  ? 'Conectando con Google...'
+                  : 'Continuar con Google'}
+              </span>
+            </button>
+
+            <p className="mt-3 text-center text-[11px] leading-relaxed text-slate-500">
+              El correo de Google debe estar registrado y activo en ApuestaX.
+            </p>
+
+            {/* CAMBIO A REGISTRO MÓVIL */}
             <div className="md:hidden mt-6 text-center text-xs text-slate-400">
               ¿No tienes una cuenta?{' '}
+
               <button
                 type="button"
                 onClick={() => switchMode(false)}
@@ -249,20 +435,20 @@ function AuthPage({ onLoginSuccess }) {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* 2. FORMULARIO DE REGISTRO (Lado Derecho) */}
-        {/* ========================================================================= */}
+        {/* ===================================================== */}
+        {/* REGISTRO */}
+        {/* ===================================================== */}
         <div
-          className={`relative md:absolute top-0 right-0 w-full md:w-1/2 h-auto md:h-full flex-col justify-center items-center px-5 sm:px-10 py-6 z-10 overflow-y-auto ${
-            !isLogin ? 'flex' : 'hidden md:flex'
-          }`}
+          className={`relative md:absolute top-0 right-0 w-full md:w-1/2 h-auto md:h-fully-center items-center px-5 sm:px-10 py-6 z-10 overflow-y-auto ${!isLogin ? 'flex' : 'hidden md:flex'
+            }`}
         >
           <div className="w-full max-w-md">
-            {/* Header del Registro */}
+
             <div className="text-center mb-5">
               <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
                 Crear Cuenta
               </h2>
+
               <p className="text-slate-400 text-xs mt-1">
                 Completa tus datos personales para registrarte
               </p>
@@ -271,24 +457,26 @@ function AuthPage({ onLoginSuccess }) {
             {error && !isLogin && (
               <div
                 role="alert"
-                className="mb-4 p-3.5 rounded-xl bg-red-500/15 border border-red-500/50 text-red-200 text-xs sm:text-sm font-medium flex items-start gap-2.5 shadow-lg shadow-red-950/40"
+                className="mb-4 p-3.5 rounded-xl bg-red-500/15 border border-red-500/50 text-red-200 text-xs sm:text-sm font-medium shadow-lg shadow-red-950/40"
               >
-                <div>
-                  <strong className="block text-red-300 font-bold mb-0.5">
-                    No se pudo completar el registro
-                  </strong>
-                  <span>{error}</span>
-                </div>
+                <strong className="block text-red-300 font-bold mb-0.5">
+                  No se pudo completar el registro
+                </strong>
+
+                <span>{error}</span>
               </div>
             )}
 
-            {/* Formulario en Grid Responsivo (1 Columna en Celular, 2 en Tablet/Escritorio) */}
-            <form onSubmit={handleRegisterSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
-              {/* 1. Nombre */}
+            <form
+              onSubmit={handleRegisterSubmit}
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left"
+            >
+              {/* NOMBRE */}
               <div>
                 <label className="block text-[11px] font-medium text-slate-300 mb-1">
                   Nombre
                 </label>
+
                 <input
                   type="text"
                   name="nombre"
@@ -300,11 +488,12 @@ function AuthPage({ onLoginSuccess }) {
                 />
               </div>
 
-              {/* 2. Apellido */}
+              {/* APELLIDO */}
               <div>
                 <label className="block text-[11px] font-medium text-slate-300 mb-1">
                   Apellido
                 </label>
+
                 <input
                   type="text"
                   name="apellido"
@@ -316,11 +505,12 @@ function AuthPage({ onLoginSuccess }) {
                 />
               </div>
 
-              {/* 3. Correo */}
+              {/* CORREO */}
               <div>
                 <label className="block text-[11px] font-medium text-slate-300 mb-1">
                   Correo electrónico
                 </label>
+
                 <input
                   type="email"
                   name="correo"
@@ -328,15 +518,16 @@ function AuthPage({ onLoginSuccess }) {
                   placeholder="correo@ejemplo.com"
                   value={registerData.correo}
                   onChange={handleRegisterChange}
-                  className="w-full px-3 py-2.5 bg-slate-800 text-white text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all cursor-pointer"
+                  className="w-full px-3 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all"
                 />
               </div>
 
-              {/* 4. Número documento */}
+              {/* DOCUMENTO */}
               <div>
                 <label className="block text-[11px] font-medium text-slate-300 mb-1">
                   Número documento
                 </label>
+
                 <input
                   type="text"
                   name="cedula"
@@ -348,11 +539,12 @@ function AuthPage({ onLoginSuccess }) {
                 />
               </div>
 
-              {/* 5. Contraseña */}
+              {/* CONTRASEÑA */}
               <div className="sm:col-span-2">
                 <label className="block text-[11px] font-medium text-slate-300 mb-1">
                   Contraseña
                 </label>
+
                 <input
                   type="password"
                   name="contraseña"
@@ -364,20 +556,21 @@ function AuthPage({ onLoginSuccess }) {
                 />
               </div>
 
-              {/* Botón Registrar */}
+              {/* BOTÓN REGISTRO */}
               <div className="sm:col-span-2 pt-2">
                 <button
                   type="submit"
-                  className="w-full py-3 bg-[#39FF14] text-slate-950 font-bold rounded-xl text-sm transition-all duration-200 hover:brightness-110 active:scale-[0.98] shadow-lg shadow-[#39FF14]/20 cursor-pointer"
+                  disabled={loading || googleLoading}
+                  className="w-full py-3 bg-[#39FF14] text-slate-950 font-bold rounded-xl text-sm transition-all duration-200 hover:brightness-110 active:scale-[0.98] shadow-lg shadow-[#39FF14]/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Registrando...' : 'Registrar'}
                 </button>
               </div>
             </form>
 
-            {/* Alternativa móvil para cambiar a login */}
             <div className="md:hidden mt-4 text-center text-xs text-slate-400">
               ¿Ya tienes cuenta?{' '}
+
               <button
                 type="button"
                 onClick={() => switchMode(true)}
@@ -389,36 +582,44 @@ function AuthPage({ onLoginSuccess }) {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* 3. PANEL DESLIZANTE / COMPUERTA (Sliding Overlay) */}
-        {/* ========================================================================= */}
+        {/* ===================================================== */}
+        {/* PANEL DESLIZANTE */}
+        {/* ===================================================== */}
         <div
-          className={`hidden md:flex absolute top-0 left-0 w-1/2 h-full z-20 transition-transform duration-700 ease-in-out ${
-            isLogin ? 'translate-x-full' : 'translate-x-0'
-          }`}
+          className={`hidden md:flex absolute top-0 left-0 w-1/2 h-full z-20 transition-transform duration-700 ease-in-out ${isLogin ? 'translate-x-full' : 'translate-x-0'
+            }`}
         >
           <div className="w-full h-full bg-slate-800 border-x border-slate-700/60 shadow-2xl flex flex-col justify-center items-center p-10 lg:p-14 text-center relative overflow-hidden">
-            
-            {/* Decoración de fondo con resplandor neón */}
-            <div className="absolute -top-24 -right-24 w-60 h-60 bg-[#39FF14]/10 rounded-full blur-3xl pointer-events-none"></div>
-            <div className="absolute -bottom-24 -left-24 w-60 h-60 bg-[#39FF14]/10 rounded-full blur-3xl pointer-events-none"></div>
 
-            {/* Contenido Condicional del Panel */}
+            <div className="absolute -top-24 -right-24 w-60 h-60 bg-[#39FF14]/10 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="absolute -bottom-24 -left-24 w-60 h-60 bg-[#39FF14]/10 rounded-full blur-3xl pointer-events-none" />
+
             <div className="relative z-10 max-w-sm flex flex-col items-center">
-              
+
               {isLogin ? (
-                /* Cuando está en Login: Panel cubre Registro */
                 <div className="animate-fadeIn space-y-5">
+
                   <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-700/80 flex items-center justify-center mx-auto text-[#39FF14] shadow-lg shadow-black/40">
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                    <svg
+                      className="w-8 h-8"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                      />
                     </svg>
                   </div>
-                  
+
                   <h2 className="text-3xl font-extrabold text-white tracking-tight">
                     ¿Nuevo por aquí?
                   </h2>
-                  
+
                   <p className="text-slate-300 text-sm leading-relaxed">
                     Regístrate con tus datos personales para acceder a la plataforma líder de pronósticos deportivos y cuotas exclusivas.
                   </p>
@@ -434,11 +635,21 @@ function AuthPage({ onLoginSuccess }) {
                   </div>
                 </div>
               ) : (
-                /* Cuando está en Registro: Panel cubre Login */
                 <div className="animate-fadeIn space-y-5">
+
                   <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-700/80 flex items-center justify-center mx-auto text-[#39FF14] shadow-lg shadow-black/40">
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                    <svg
+                      className="w-8 h-8"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+                      />
                     </svg>
                   </div>
 
@@ -447,7 +658,7 @@ function AuthPage({ onLoginSuccess }) {
                   </h2>
 
                   <p className="text-slate-300 text-sm leading-relaxed">
-                    Para mantenerte conectado con nosotros, por favor inicia sesión con tu correo electrónico y contraseña.
+                    Para mantenerte conectado con nosotros, inicia sesión con tu correo electrónico, contraseña o cuenta de Google.
                   </p>
 
                   <div className="pt-3">
@@ -459,6 +670,7 @@ function AuthPage({ onLoginSuccess }) {
                       Iniciar Sesión
                     </button>
                   </div>
+
                 </div>
               )}
 
@@ -468,10 +680,11 @@ function AuthPage({ onLoginSuccess }) {
 
       </div>
 
-      {/* Footer info */}
+      {/* FOOTER */}
       <div className="mt-8 text-center text-xs text-slate-500">
         ApuestaX © 2026
       </div>
+
     </div>
   );
 }

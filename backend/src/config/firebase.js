@@ -1,5 +1,7 @@
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
+
 const fs = require('fs');
 const path = require('path');
 
@@ -50,10 +52,27 @@ const firebaseApp =
         })
         : getApps()[0];
 
+// Firestore
 const dbFirebase = getFirestore(firebaseApp);
+
+// Authentication
+const authFirebase = getAuth(firebaseApp);
 
 console.log(
     '[Firebase] Firebase Admin inicializado correctamente'
 );
 
+console.log(
+    '[Firebase] Firebase Authentication inicializado correctamente'
+);
+
+// ============================================================
+// EXPORTACIONES
+// ============================================================
+
+// Conservamos el comportamiento anterior:
+// require('./config/firebase') sigue devolviendo Firestore.
 module.exports = dbFirebase;
+
+// Agregamos Authentication sin romper código existente.
+module.exports.authFirebase = authFirebase;

@@ -17,7 +17,7 @@ const {
 const mysqlPool = require('./config/mysql');
 const pgPool = require('./config/postgres');
 const mongoose = require('./config/mongo');
-const dbFirebase = require('./config/firebase');
+const { authFirebase } = require('./config/firebase');
 
 
 // =====================================================================
@@ -1024,6 +1024,177 @@ app.post('/api/auth/login', async (req, res) => {
         return res.status(500).json({
             message:
                 'No se pudo iniciar sesión.',
+        });
+    }
+});
+
+// =====================================================================
+// 3.4.1 INICIAR SESIÓN CON GOOGLE
+// POST /api/auth/google
+// =====================================================================
+
+app.post('/api/auth/google', async (req, res) => {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+        return res.status(400).json({
+            message:
+                'El token de autenticación de Google es obligatorio.'
+        });
+    }
+
+    try {
+        // -------------------------------------------------------------
+        // 1. Verificar token con Firebase Admin
+        // -------------------------------------------------------------
+
+        const decodedToken =
+            await authFirebase.verifyIdToken(idToken);
+
+        const correo =
+            decodedToken.email?.trim().toLowerCase();
+
+        if (!correo) {
+            return res.status(401).json({
+                message:
+                    'La cuenta de Google no proporcionó un correo válido.'
+            });
+        }
+
+        if (!decodedToken.email_verified) {
+            return res.status(401).json({
+                message:
+                    'El correo de Google no se encuentra verificado.'
+            });
+        }
+
+        // -------------------------------------------------------------
+        // 2. Buscar el usuario real de ApuestaX en Azure SQL
+        // -------------------------------------------------------------
+
+        const pool = await sqlServerPool;
+
+        if (!pool) {
+            throw new Error(
+                'SQL Server no disponible'
+            );
+        }
+
+        const result = await pool
+            .request()
+            .input(
+                'correo',
+                sql.VarChar(100),
+                correo
+            )
+            .query(`
+                SELECT
+                    cedula,
+                    nombre_rol,
+                    nombre,
+                    apellido,
+                    correo,
+                    estado
+                FROM usuario
+                WHERE LOWER(correo) = LOWER(@correo)
+                  AND estado = 'Activo'
+            `);
+
+        if (result.recordset.length === 0) {
+            return res.status(403).json({
+                message:
+                    'La cuenta de Google no está vinculada a un usuario activo de ApuestaX.'
+            });
+        }
+
+        const dbUser = result.recordset[0];
+
+        const loggedUser = {
+            cedula: dbUser.cedula,
+            nombre_rol: dbUser.nombre_rol,
+            nombre: dbUser.nombre,
+            apellido: dbUser.apellido,
+            correo: dbUser.correo,
+            estado: dbUser.estado
+        };
+
+        // -------------------------------------------------------------
+        // 3. Obtener permisos desde Azure SQL
+        // -------------------------------------------------------------
+
+        const permisosResult = await pool
+            .request()
+            .input(
+                'nombre_rol',
+                sql.VarChar(50),
+                loggedUser.nombre_rol
+            )
+            .query(`
+                SELECT
+                    pr.nombre_modulo,
+                    ms.ruta_frontend
+                FROM permiso_rol pr
+                INNER JOIN modulo_sistema ms
+                    ON pr.nombre_modulo = ms.nombre_modulo
+                WHERE pr.nombre_rol = @nombre_rol
+            `);
+
+        // -------------------------------------------------------------
+        // 4. Generar JWT normal de ApuestaX
+        // -------------------------------------------------------------
+
+        const token =
+            generarToken(loggedUser);
+
+        // -------------------------------------------------------------
+        // 5. Registrar auditoría
+        // -------------------------------------------------------------
+
+        if (
+            mongoose.connection.readyState === 1
+        ) {
+            await LoginAudit.create({
+                cedula_usuario:
+                    loggedUser.cedula,
+
+                ip_conexion:
+                    req.ip || '127.0.0.1',
+
+                estado_intento:
+                    'Exitoso',
+
+                tipo_evento:
+                    'LOGIN_GOOGLE_SUCCESS'
+            }).catch((auditError) => {
+                console.error(
+                    '[MongoDB] Error registrando LOGIN_GOOGLE_SUCCESS:',
+                    auditError.message
+                );
+            });
+        }
+
+        // -------------------------------------------------------------
+        // 6. Responder igual que login tradicional
+        // -------------------------------------------------------------
+
+        return res.json({
+            ...loggedUser,
+            token,
+            permisos:
+                permisosResult.recordset,
+            proveedor_autenticacion:
+                'Google'
+        });
+
+    } catch (error) {
+        console.error(
+            '[Auth/Google] Error:',
+            error.message
+        );
+
+        return res.status(401).json({
+            message:
+                'No se pudo validar la autenticación con Google.'
         });
     }
 });
