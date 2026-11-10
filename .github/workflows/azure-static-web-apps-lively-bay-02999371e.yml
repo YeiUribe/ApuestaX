@@ -29,11 +29,12 @@ jobs:
           VITE_API_URL: "https://apuestax-api-tdea-byb6b4e5h6btb8dd.brazilsouth-01.azurewebsites.net/api/"
 
           VITE_FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: "apuestax-pagos.firebaseapp.com"  
-          VITE_FIREBASE_PROJECT_ID: "apuesta  x-pagos"
+          VITE_FIREBASE_AUTH_DOMAIN: "apuestax-pagos.firebaseapp.com"
+          VITE_FIREBASE_PROJECT_ID: "apuestax-pagos"
           VITE_FIREBASE_STORAGE_BUCKET: "apuestax-pagos.firebasestorage.app"
-          VITE_FIREBASE_MESSAGING_SENDER_ID: "13986195  5830"
-          VITE_FIREBASE_APP_ID: $ {{secrets.VITE_FIREBASE_APP_ID}}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: "139861955830"
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+
           VITE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_SITE_KEY }}
 
         with:
@@ -44,7 +45,7 @@ jobs:
           # Frontend React + Vite
           app_location: "./frontend"
 
-          # El backend está desplegado aparte en Azure App Service
+          # Backend desplegado por separado en Azure App Service
           api_location: ""
 
           # Vite genera la aplicación compilada en dist/
