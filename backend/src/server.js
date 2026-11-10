@@ -152,7 +152,7 @@ app.get('/api/health', async (req, res) => {
                     : 'Desconectado',
 
             firebase:
-                dbFirebase
+                authFirebase
                     ? `Configurado (${process.env.FIREBASE_PROJECT_ID ||
                     'apuestax-pagos'
                     })`
