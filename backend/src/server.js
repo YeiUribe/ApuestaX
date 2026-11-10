@@ -779,6 +779,73 @@ async function hashExistingPlainPasswords() {
 
 hashExistingPlainPasswords();
 
+// =====================================================================
+// VALIDAR GOOGLE RECAPTCHA
+// =====================================================================
+
+async function validateRecaptchaToken(
+    recaptchaToken,
+    remoteIp
+) {
+    const secretKey =
+        process.env.RECAPTCHA_SECRET_KEY;
+
+    if (!secretKey) {
+        throw new Error(
+            'RECAPTCHA_SECRET_KEY no está configurada'
+        );
+    }
+
+    if (!recaptchaToken) {
+        return {
+            success: false,
+            reason: 'missing-token',
+        };
+    }
+
+    const parameters =
+        new URLSearchParams();
+
+    parameters.append(
+        'secret',
+        secretKey
+    );
+
+    parameters.append(
+        'response',
+        recaptchaToken
+    );
+
+    if (remoteIp) {
+        parameters.append(
+            'remoteip',
+            remoteIp
+        );
+    }
+
+    const response = await fetch(
+        'https://www.google.com/recaptcha/api/siteverify',
+        {
+            method: 'POST',
+
+            headers: {
+                'Content-Type':
+                    'application/x-www-form-urlencoded',
+            },
+
+            body: parameters.toString(),
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Google reCAPTCHA respondió con estado ${response.status}`
+        );
+    }
+
+    return response.json();
+}
+
 
 // =====================================================================
 // 3.4 INICIAR SESIÓN
@@ -789,6 +856,7 @@ app.post('/api/auth/login', async (req, res) => {
     const {
         correo,
         contraseña,
+        recaptchaToken,
     } = req.body;
 
     if (
@@ -801,8 +869,42 @@ app.post('/api/auth/login', async (req, res) => {
         });
     }
 
+    if (!recaptchaToken) {
+        return res.status(400).json({
+            message:
+                'Debes completar la verificación reCAPTCHA.',
+        });
+    }
 
     try {
+        // =============================================================
+        // VALIDAR RECAPTCHA ANTES DE CONSULTAR CREDENCIALES
+        // =============================================================
+
+        const recaptchaResult =
+            await validateRecaptchaToken(
+                recaptchaToken,
+                req.ip
+            );
+
+        if (!recaptchaResult.success) {
+            console.warn(
+                '[Auth/reCAPTCHA] Verificación rechazada:',
+                recaptchaResult['error-codes'] ||
+                recaptchaResult.reason ||
+                'sin detalle'
+            );
+
+            return res.status(403).json({
+                message:
+                    'La verificación reCAPTCHA no fue válida. Intenta nuevamente.',
+            });
+        }
+
+        // =============================================================
+        // CONTINUAR CON LOGIN NORMAL
+        // =============================================================
+
         const pool = await sqlServerPool;
 
         if (!pool) {

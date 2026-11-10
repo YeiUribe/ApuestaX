@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 import {
   login,
@@ -64,6 +65,12 @@ function AuthPage({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] =
     useState(false);
+
+  const [recaptchaToken, setRecaptchaToken] =
+    useState('');
+
+  const recaptchaSiteKey =
+    import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
   const isBusy = loading || googleLoading;
 
@@ -170,14 +177,35 @@ function AuthPage({ onLoginSuccess }) {
   const handleLoginSubmit = async (event) => {
     event.preventDefault();
 
-    setLoading(true);
     setError('');
     setMessage('');
 
+    if (!recaptchaSiteKey) {
+      setError(
+        'reCAPTCHA no está configurado correctamente.'
+      );
+      return;
+    }
+
+    if (!recaptchaToken) {
+      setError(
+        'Debes completar la verificación "No soy un robot".'
+      );
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      const user = await login(loginData);
+      const user = await login({
+        ...loginData,
+        recaptchaToken,
+      });
+
       onLoginSuccess(user);
     } catch (requestError) {
+      setRecaptchaToken('');
+
       setError(
         requestError.response?.data?.message ||
         (!requestError.response
@@ -506,10 +534,39 @@ function AuthPage({ onLoginSuccess }) {
                 />
               </div>
 
+              <div className="flex justify-center">
+                {recaptchaSiteKey ? (
+                  <ReCAPTCHA
+                    sitekey={recaptchaSiteKey}
+                    theme="dark"
+                    onChange={(token) => {
+                      setRecaptchaToken(token || '');
+                      setError('');
+                    }}
+                    onExpired={() => {
+                      setRecaptchaToken('');
+                    }}
+                    onErrored={() => {
+                      setRecaptchaToken('');
+                      setError(
+                        'No se pudo cargar reCAPTCHA. Recarga la página e intenta nuevamente.'
+                      );
+                    }}
+                  />
+                ) : (
+                  <div
+                    role="alert"
+                    className="w-full rounded-xl border border-red-500/50 bg-red-500/15 p-3 text-xs text-red-200"
+                  >
+                    reCAPTCHA no está configurado.
+                  </div>
+                )}
+              </div>
+
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={isBusy}
+                  disabled={isBusy || !recaptchaToken}
                   className="w-full py-3 bg-[#39FF14] text-slate-950 font-bold rounded-xl text-sm transition-all duration-200 hover:brightness-110 active:scale-[0.98] shadow-lg shadow-[#39FF14]/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Validando...' : 'Ingresar'}
