@@ -46,13 +46,54 @@ export const getEmpresas = async () => {
 
 export const login = async (credentials) => {
     const response = await apiClient.post('auth/login', credentials);
+    if (response.data?.token && !response.data?.requiresMfa) {
+        localStorage.setItem('apuestax_jwt', response.data.token);
+    }
+    const userPayload = response.data?.user || response.data;
+    if (userPayload?.cedula && !response.data?.requiresMfa) {
+        localStorage.setItem('apuestax_user', JSON.stringify(userPayload));
+    }
+    return response.data;
+};
+
+export const verifyMfaLogin = async (mfaToken, codigo) => {
+    const response = await apiClient.post('auth/mfa/verify', {
+        mfaToken,
+        codigo,
+    });
+
     if (response.data?.token) {
         localStorage.setItem('apuestax_jwt', response.data.token);
     }
+
     const userPayload = response.data?.user || response.data;
     if (userPayload?.cedula) {
         localStorage.setItem('apuestax_user', JSON.stringify(userPayload));
     }
+
+    return response.data;
+};
+
+export const getMfaStatus = async () => {
+    const response = await apiClient.get('auth/mfa/status');
+    return response.data;
+};
+
+export const setupMfa = async () => {
+    const response = await apiClient.post('auth/mfa/setup');
+    return response.data;
+};
+
+export const enableMfa = async (codigo) => {
+    const response = await apiClient.post('auth/mfa/enable', { codigo });
+    return response.data;
+};
+
+export const disableMfa = async (contraseña, codigo) => {
+    const response = await apiClient.post('auth/mfa/disable', {
+        contraseña,
+        codigo,
+    });
     return response.data;
 };
 

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'apuestax_super_secret_jwt_key_2026';
+const MFA_JWT_SECRET = process.env.MFA_JWT_SECRET;
 
 function base64UrlEncode(input) {
     return Buffer.from(input)
@@ -41,6 +42,74 @@ function generarToken(user) {
         .replace(/\//g, '_');
 
     return `${unsignedToken}.${signature}`;
+}
+
+function generarTokenMfa(user) {
+    if (!MFA_JWT_SECRET) {
+        throw new Error('MFA_JWT_SECRET no está configurada.');
+    }
+
+    const header = { alg: 'HS256', typ: 'JWT' };
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+        cedula: user.cedula,
+        purpose: 'mfa-verification',
+        iat: now,
+        exp: now + 60 * 5,
+    };
+
+    const unsignedToken = `${base64UrlEncode(JSON.stringify(header))}.${base64UrlEncode(JSON.stringify(payload))}`;
+    const signature = crypto
+        .createHmac('sha256', MFA_JWT_SECRET)
+        .update(unsignedToken)
+        .digest('base64')
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_');
+
+    return `${unsignedToken}.${signature}`;
+}
+
+function verificarTokenMfa(token) {
+    if (!MFA_JWT_SECRET) {
+        throw new Error('MFA_JWT_SECRET no está configurada.');
+    }
+
+    const parts = String(token || '').split('.');
+    if (parts.length !== 3) throw new Error('Formato de token MFA inválido');
+
+    const [encodedHeader, encodedPayload, signature] = parts;
+    const unsignedToken = `${encodedHeader}.${encodedPayload}`;
+    const expectedSignature = crypto
+        .createHmac('sha256', MFA_JWT_SECRET)
+        .update(unsignedToken)
+        .digest('base64')
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_');
+
+    if (
+        signature.length !== expectedSignature.length ||
+        !crypto.timingSafeEqual(
+            Buffer.from(signature),
+            Buffer.from(expectedSignature)
+        )
+    ) {
+        throw new Error('Firma del token MFA inválida.');
+    }
+
+    const payload = JSON.parse(base64UrlDecode(encodedPayload));
+    if (payload.purpose !== 'mfa-verification') {
+        throw new Error('Propósito del token MFA inválido.');
+    }
+    if (!payload.exp || Math.floor(Date.now() / 1000) > payload.exp) {
+        throw new Error('El token MFA ha expirado.');
+    }
+    if (!payload.cedula) {
+        throw new Error('El token MFA no identifica al usuario.');
+    }
+
+    return payload;
 }
 
 function verificarToken(token) {
@@ -106,8 +175,9 @@ function permitirRoles(...rolesPermitidos) {
 
 module.exports = {
     generarToken,
+    generarTokenMfa,
+    verificarTokenMfa,
     verificarToken,
     autenticar,
     permitirRoles,
 };
-

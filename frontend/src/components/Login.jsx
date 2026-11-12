@@ -8,6 +8,7 @@ import {
   prepareGoogleRegistration,
   register,
   registerWithGoogle,
+  verifyMfaLogin,
 } from '../services/userService';
 
 function GoogleIcon() {
@@ -65,6 +66,8 @@ function AuthPage({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] =
     useState(false);
+  const [mfaChallenge, setMfaChallenge] = useState(null);
+  const [mfaCode, setMfaCode] = useState('');
 
   const [recaptchaToken, setRecaptchaToken] =
     useState('');
@@ -202,7 +205,13 @@ function AuthPage({ onLoginSuccess }) {
         recaptchaToken,
       });
 
-      onLoginSuccess(user);
+      if (user.mfaRequired) {
+        setMfaChallenge(user.mfaToken);
+        setMfaCode('');
+        setMessage('Ingresa el código de seis dígitos de tu aplicación autenticadora.');
+      } else {
+        onLoginSuccess(user);
+      }
     } catch (requestError) {
       setRecaptchaToken('');
 
@@ -211,6 +220,33 @@ function AuthPage({ onLoginSuccess }) {
         (!requestError.response
           ? 'No se pudo conectar con el servidor.'
           : 'Correo o contraseña incorrectos.')
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMfaSubmit = async (event) => {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+
+    if (!/^\d{6}$/.test(mfaCode.trim())) {
+      setError('El código MFA debe contener seis dígitos.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const user = await verifyMfaLogin(
+        mfaChallenge,
+        mfaCode.trim()
+      );
+      onLoginSuccess(user);
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+        'No se pudo verificar el código MFA.'
       );
     } finally {
       setLoading(false);
@@ -487,7 +523,49 @@ function AuthPage({ onLoginSuccess }) {
               </div>
             )}
 
-            {/* LOGIN CORREO + CONTRASEÑA */}
+            {mfaChallenge ? (
+              <form onSubmit={handleMfaSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                    Código de autenticación
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={mfaCode}
+                    onChange={(event) => {
+                      setMfaCode(event.target.value.replace(/\D/g, ''));
+                      setError('');
+                    }}
+                    placeholder="123456"
+                    disabled={isBusy}
+                    className="w-full px-4 py-2.5 bg-slate-800 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700 focus:border-[#39FF14] focus:ring-1 focus:ring-[#39FF14] outline-none transition-all duration-200 disabled:opacity-60"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isBusy || mfaCode.length !== 6}
+                  className="w-full py-3 bg-[#39FF14] text-slate-950 font-bold rounded-xl text-sm transition-all duration-200 hover:brightness-110 active:scale-[0.98] shadow-lg shadow-[#39FF14]/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Verificando...' : 'Verificar código'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMfaChallenge(null);
+                    setMfaCode('');
+                    setMessage('');
+                    setError('');
+                  }}
+                  disabled={isBusy}
+                  className="w-full text-xs text-slate-400 hover:text-white disabled:opacity-60"
+                >
+                  Volver al inicio de sesión
+                </button>
+              </form>
+            ) : (
             <form
               onSubmit={handleLoginSubmit}
               className="space-y-4"
@@ -573,9 +651,10 @@ function AuthPage({ onLoginSuccess }) {
                 </button>
               </div>
             </form>
+            )}
 
             {/* SEPARADOR GOOGLE */}
-            <div className="my-5 flex items-center gap-3">
+            {!mfaChallenge && <div className="my-5 flex items-center gap-3">
               <div className="h-px flex-1 bg-slate-700" />
 
               <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap">
@@ -583,10 +662,10 @@ function AuthPage({ onLoginSuccess }) {
               </span>
 
               <div className="h-px flex-1 bg-slate-700" />
-            </div>
+            </div>}
 
             {/* GOOGLE */}
-            <button
+            {!mfaChallenge && <button
               type="button"
               onClick={handleGoogleLogin}
               disabled={isBusy}
@@ -599,7 +678,7 @@ function AuthPage({ onLoginSuccess }) {
                   ? 'Conectando con Google...'
                   : 'Continuar con Google'}
               </span>
-            </button>
+            </button>}
 
             {/* CAMBIO A REGISTRO MÓVIL */}
             <div className="md:hidden mt-6 text-center text-xs text-slate-400">

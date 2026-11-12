@@ -11,6 +11,7 @@ import {
   cancelTicket,
   getRules,
 } from '../services/userService';
+import MfaSettings from './MfaSettings';
 
 const BANCOS_PSE = ['Bancolombia', 'Nequi', 'Davivienda', 'Banco de Bogotá', 'DaviPlata'];
 
@@ -1076,6 +1077,7 @@ function WalletPanel({ user, initialSection = 'recarga', onBalanceChange }) {
                   Activa y Verificada ✓
                 </strong>
               </div>
+              <MfaSettings />
             </div>
           </div>
 

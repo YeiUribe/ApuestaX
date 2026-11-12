@@ -31,6 +31,7 @@ const paymentRoutes = require('./modules/payments/paymentRoutes');
 
 const {
     generarToken,
+    generarTokenMfa,
 } = require('./middlewares/authMiddleware');
 
 const {
@@ -40,6 +41,7 @@ const {
     defaultMercados,
     defaultReglas,
 } = require('./modules/rules/mongoSchemas');
+const createMfaRoutes = require('./modules/mfa/mfaRoutes');
 
 
 // =====================================================================
@@ -276,6 +278,15 @@ app.use(
 app.use(
     '/api/payments',
     paymentRoutes
+);
+
+app.use(
+    '/api/auth/mfa',
+    createMfaRoutes({
+        sqlServerPool,
+        sql,
+        LoginAudit,
+    })
 );
 
 
@@ -914,6 +925,14 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
 
+        const mfaIsEnabled =
+            String(process.env.MFA_ENABLED).toLowerCase() === 'true';
+        const userColumns = mfaIsEnabled
+            ? `,
+                    mfa_habilitado,
+                    mfa_secreto_encriptado`
+            : '';
+
         const result = await pool
             .request()
 
@@ -931,7 +950,7 @@ app.post('/api/auth/login', async (req, res) => {
                     apellido,
                     correo,
                     [contraseña],
-                    estado
+                    estado${userColumns}
                 FROM usuario
                 WHERE correo = @correo
                   AND estado = 'Activo'
@@ -1056,6 +1075,27 @@ app.post('/api/auth/login', async (req, res) => {
             estado:
                 dbUser.estado,
         };
+
+        if (mfaIsEnabled && dbUser.mfa_habilitado) {
+            try {
+                const mfaToken = generarTokenMfa(loggedUser);
+
+                return res.json({
+                    mfaRequired: true,
+                    mfaToken,
+                    message:
+                        'Ingresa el código de tu aplicación de autenticación.',
+                });
+            } catch (error) {
+                if (error.message.includes('MFA_JWT_SECRET')) {
+                    return res.status(503).json({
+                        message:
+                            'MFA está habilitado, pero falta configurar MFA_JWT_SECRET.',
+                    });
+                }
+                throw error;
+            }
+        }
 
 
         const permisosResult =
